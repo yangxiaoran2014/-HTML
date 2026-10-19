@@ -1,0 +1,2455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>耐火材料温度计算器 · 外壁温度与降温曲线</title>
+<style>
+  :root{
+    --bg:#edf1f7; --card:#ffffff; --line:#dce4ef; --txt:#12233d; --muted:#5b7089; --dim:#8b9bb0;
+    --accent:#1d5fd0; --accent2:#0e9488; --ok:#0f7a56; --warn:#a1590a; --err:#c02626;
+    --warn-bg:#fff8ea; --warn-line:#f0d8a8; --err-bg:#fdeeee; --err-line:#f2c8c8;
+    --info-bg:#f3f7fd; --info-line:#d5e3f7; --ok-bg:#f1faf6; --ok-line:#cbe8da;
+    --rad:14px; --shadow:0 1px 2px rgba(16,38,72,.05), 0 6px 18px rgba(16,38,72,.055);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt); font-size:14px; line-height:1.55;
+    font-family:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num, input, td, .kpi .v, .hero .val{font-variant-numeric:tabular-nums}
+
+  /* ===== 顶栏 ===== */
+  .topbar{
+    position:sticky; top:0; z-index:30;
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    padding:0 20px; min-height:58px;
+    background:linear-gradient(115deg,#0c2749 0%,#1d5fd0 62%,#0d8578 100%);
+    color:#fff; box-shadow:0 2px 12px rgba(12,39,73,.22);
+  }
+  .brand{display:flex; align-items:baseline; gap:10px; min-width:0}
+  .brand b{font-size:16px; font-weight:600; letter-spacing:.4px; white-space:nowrap}
+  .brand span{font-size:12px; opacity:.72; white-space:nowrap}
+  .tabs{display:flex; gap:6px; margin-left:auto; background:rgba(255,255,255,.14); padding:4px; border-radius:11px}
+  .tab{
+    border:0; background:transparent; color:rgba(255,255,255,.82); font:inherit; font-size:13px;
+    padding:7px 14px; border-radius:8px; cursor:pointer; white-space:nowrap; transition:.15s;
+  }
+  .tab:hover{background:rgba(255,255,255,.13); color:#fff}
+  .tab.active{background:#fff; color:#12336b; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.16)}
+  .printbtn{
+    margin-left:10px; font-size:12.5px; color:#fff; border-color:rgba(255,255,255,.45);
+    background:rgba(255,255,255,.14);
+  }
+  .printbtn:hover{background:rgba(255,255,255,.26); color:#fff; border-color:#fff}
+
+  /* ===== 工作台骨架 ===== */
+  .workbench{
+    display:grid; grid-template-columns:376px minmax(0,1fr); gap:16px;
+    max-width:1560px; margin:0 auto; padding:16px 18px 40px; align-items:start;
+  }
+  .rail{display:flex; flex-direction:column; gap:14px; position:sticky; top:74px;
+        max-height:calc(100vh - 92px); overflow-y:auto; padding-right:3px; scrollbar-width:thin}
+  .stage{display:flex; flex-direction:column; gap:14px; min-width:0}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--rad);
+    box-shadow:var(--shadow); padding:15px 16px; min-width:0;
+  }
+  h2{
+    margin:0 0 12px; font-size:13px; font-weight:600; color:var(--muted);
+    letter-spacing:.5px; display:flex; align-items:center; gap:8px;
+  }
+  h2::before{content:""; width:3px; height:13px; border-radius:2px; background:var(--accent)}
+  h2 small{font-weight:400; color:var(--dim); letter-spacing:0}
+  .panel.hidden{display:none !important}
+  .hidden{display:none !important}
+
+  /* ===== 分段控件 ===== */
+  .modes{display:flex; gap:4px; background:#f1f5fb; border:1px solid var(--line); border-radius:10px; padding:3px}
+  .modes label{flex:1; margin:0; cursor:pointer; position:relative}
+  .modes input{position:absolute; opacity:0; width:0; height:0}
+  .modes span{
+    display:block; text-align:center; padding:7px 4px; border-radius:8px;
+    font-size:12.5px; color:var(--muted); transition:.15s; white-space:nowrap;
+  }
+  .modes input:checked + span{background:var(--accent); color:#fff; font-weight:600; box-shadow:0 2px 8px rgba(29,95,208,.26)}
+  .modes label:hover span{color:var(--accent)}
+  .modes input:checked + span{color:#fff}
+
+  /* ===== 表单 ===== */
+  .fields{display:flex; flex-direction:column; gap:10px; margin-top:12px}
+  .fields .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .fld{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); min-width:0}
+  .fld .lbl{display:flex; justify-content:space-between; align-items:baseline; gap:6px}
+  .fld .lbl i{font-style:normal; color:var(--dim); font-size:11px}
+  .inp{display:flex; align-items:center; gap:6px; background:#fbfcfe; border:1px solid var(--line);
+       border-radius:9px; padding:0 10px; transition:border-color .15s, box-shadow .15s, background .15s}
+  .inp:focus-within{border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(29,95,208,.12)}
+  .inp input{
+    flex:1; min-width:0; border:0; outline:0; background:transparent; font:inherit;
+    font-size:14px; color:var(--txt); padding:8px 0;
+  }
+  .inp i{font-style:normal; font-size:11.5px; color:var(--dim); white-space:nowrap}
+  .inp select{border:0; background:transparent; font:inherit; font-size:13px; color:var(--txt); padding:8px 0; outline:0; min-width:0}
+  .hint{font-size:11px; color:var(--dim); line-height:1.45; margin-top:2px}
+  .fld.inlineRow{flex-direction:row; align-items:center; gap:8px}
+  .fld.inlineRow .inp{flex:1}
+
+  /* ===== 炉衬层（卡片行） ===== */
+  .layers{display:flex; flex-direction:column; gap:8px}
+  .lrow{border:1px solid var(--line); border-radius:11px; background:#fafcff; padding:6px 7px}
+  .lhead{display:flex; gap:6px; align-items:center}
+  .lhead .lname{
+    flex:1; min-width:0; border:0; background:transparent; font:inherit; font-size:12.5px; font-weight:600;
+    color:var(--txt); padding:2px 4px; border-radius:6px; outline:0;
+  }
+  .lhead .lname:focus{background:#fff; box-shadow:0 0 0 2px rgba(29,95,208,.16)}
+  .lhead .btn.danger{color:var(--dim); font-size:13px; padding:2px 6px}
+  .lhead .btn.danger:hover{color:var(--err); background:#fdeeee}
+  .lgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:4px}
+  .lgrid label{display:flex; align-items:center; gap:3px; font-size:9.5px; color:var(--dim); min-width:0}
+  .lgrid label i{font-style:normal; font-size:8px; color:#a9b7c9; white-space:nowrap}
+  .lgrid input, .lgrid select{
+    width:100%; min-width:0; flex:1; border:1px solid var(--line); border-radius:6px; background:#fff;
+    font:inherit; font-size:11.5px; color:var(--txt); padding:3px 5px; outline:0;
+  }
+  .lgrid input:focus, .lgrid select:focus{border-color:var(--accent); box-shadow:0 0 0 2px rgba(29,95,208,.12)}
+  .lgrid .presetWrap{grid-column:1 / -1}
+  .row-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center}
+  .spacer{flex:1}
+
+  /* ===== 按钮 ===== */
+  .btn{
+    border:1px solid var(--line); background:#fff; color:var(--txt); font:inherit; font-size:12.5px;
+    padding:7px 12px; border-radius:9px; cursor:pointer; transition:.15s; white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--accent); color:var(--accent); background:#f6faff}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.primary:hover{background:#19509f; color:#fff}
+  .btn.ghost{color:var(--muted)}
+  .btn.danger{color:#b3242f; padding:4px 8px; border-color:transparent; background:transparent; font-size:14px; line-height:1}
+  .btn.danger:hover{background:#fdeeee; border-color:var(--err-line)}
+  .btn.wide{width:100%; justify-content:center; text-align:center}
+  .btn.mini{padding:4px 9px; font-size:11.5px; margin-left:auto; font-weight:500}
+
+  /* ===== 状态条 ===== */
+  #msgs{display:flex; flex-direction:column; gap:6px}
+  #msgs:empty{display:none}
+  .msg{
+    display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.5;
+    padding:8px 11px; border-radius:10px; border:1px solid transparent;
+  }
+  .msg::before{content:""; flex:0 0 auto; width:7px; height:7px; border-radius:50%; margin-top:6px; background:currentColor; opacity:.75}
+  .msg.warn{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
+  .msg.err{background:var(--err-bg); border-color:var(--err-line); color:var(--err)}
+  .msg.info{background:var(--info-bg); border-color:var(--info-line); color:#2a558c}
+  .msg.ok{background:var(--ok-bg); border-color:var(--ok-line); color:var(--ok)}
+  .msg b{font-weight:600}
+
+  /* ===== 主结果 ===== */
+  .hero-card{padding:0; overflow:hidden}
+  .hero{
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    padding:18px 20px; background:linear-gradient(120deg,#0f2f5c,#1d5fd0 68%,#0e9488); color:#fff;
+  }
+  .hero .lbl{font-size:12px; opacity:.8; letter-spacing:.6px}
+  .hero .val{font-size:46px; font-weight:700; line-height:1.05; letter-spacing:-1px}
+  .hero .val .u{font-size:17px; font-weight:500; margin-left:4px; opacity:.85}
+  .hero .side{text-align:right; font-size:12.5px; line-height:1.65; opacity:.92}
+  .hero .side b{font-size:15px}
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:0}
+  .kpi{padding:11px 14px; border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:0}
+  .kpi .k{font-size:11px; color:var(--dim); white-space:nowrap}
+  .kpi .v{font-size:16px; font-weight:600; margin-top:2px; white-space:nowrap}
+  .kpi .v small{font-size:10.5px; font-weight:400; color:var(--dim); margin-left:2px}
+
+  /* ===== 表格 ===== */
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:11px; max-width:100%}
+  table{border-collapse:collapse; width:100%; font-size:12.5px}
+  th{
+    text-align:right; font-weight:600; font-size:11px; color:var(--dim); letter-spacing:.3px;
+    padding:8px 10px; background:#f7fafd; white-space:nowrap; border-bottom:1px solid var(--line);
+  }
+  th:first-child, td:first-child{text-align:left}
+  td{padding:7px 10px; border-bottom:1px solid #eff3f9; text-align:right; white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  tbody tr:nth-child(even){background:#fcfdff}
+  tbody tr:hover{background:#f4f8fe}
+  td.name{color:var(--txt)}
+  .muted{color:var(--dim); font-weight:400}
+
+  /* ===== 查询 / 图表（选项卡 ②） ===== */
+  .qbox{border:1px solid var(--line); border-radius:11px; padding:10px 11px; background:#fafcff; margin-bottom:10px}
+  .qcard{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .qcard > h2, .qcard > #kMsgs, .qcard > .hint{grid-column:1 / -1}
+  .qcard .qbox{margin-bottom:0}
+  @media (max-width:760px){ .qcard{grid-template-columns:1fr} }
+  .qbox:last-child{margin-bottom:0}
+  .qbox .t{font-size:12px; font-weight:600; margin-bottom:7px; display:flex; align-items:center; gap:6px}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block}
+  .dot.g{background:var(--ok)}
+  .dot.o{background:#e2542a}
+  .qrow{display:flex; gap:6px; align-items:stretch}
+  .qrow .inp{flex:1}
+  .qrow .unit{display:flex; align-items:center; padding:0 10px; border:1px solid var(--line); border-radius:9px;
+               background:#fff; color:var(--dim); font-size:12px; white-space:nowrap}
+  .qres{margin-top:8px; padding:8px 10px; border-radius:9px; background:#fff; border:1px dashed var(--line);
+        font-size:12.5px; min-height:34px; color:var(--muted)}
+  .qres.good{border-style:solid; border-color:var(--ok-line); background:var(--ok-bg); color:var(--txt)}
+  .qres.bad{border-color:var(--err-line); background:var(--err-bg); color:var(--err)}
+  .qres .big{font-size:17px; font-weight:700; color:var(--accent)}
+  .qres .big.o{color:#d1461f}
+  .qres .sub{font-size:11.5px; color:var(--dim)}
+  .qres .row2{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:2px 0; border-bottom:1px dashed #eef3fa}
+  .qres .row2:last-child{border-bottom:0}
+  .qres .row2 .nm{color:var(--muted)}
+  .qres .row2 .vv{font-weight:600; white-space:nowrap}
+  .swatch{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:1px}
+
+  .chartwrap{position:relative; width:100%}
+  .chartwrap svg{width:100%; height:auto; display:block; touch-action:none}
+  #tip{
+    position:absolute; pointer-events:none; z-index:5; background:rgba(12,32,60,.95); color:#fff;
+    border-radius:9px; padding:7px 10px; font-size:12px; line-height:1.5; white-space:nowrap;
+    box-shadow:0 8px 20px rgba(9,25,48,.3); opacity:0; transition:opacity .1s;
+  }
+  #tip .tt{font-size:10.5px; color:#9fc0e8; letter-spacing:.3px}
+  #tip b{font-size:13px}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:10px}
+  .legend .lg{cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:5px}
+  .legend .lg i{width:14px; height:3px; border-radius:2px; display:inline-block}
+  .legend .lg.off{opacity:.3; text-decoration:line-through}
+
+  /* ===== 说明区 ===== */
+  details{border-top:1px dashed var(--line); padding-top:10px; margin-top:4px}
+  details:first-child{border-top:0; padding-top:0; margin-top:0}
+  summary{cursor:pointer; font-size:12.5px; color:var(--accent); font-weight:600; outline:none; list-style:none}
+  summary::before{content:"▸ "; color:var(--dim)}
+  details[open] summary::before{content:"▾ "}
+  details .body{padding-top:9px; font-size:12.5px; color:#3b5273; line-height:1.7}
+  .formula{
+    margin:8px 0; padding:9px 11px; background:#f7fafd; border-left:3px solid var(--accent);
+    border-radius:0 8px 8px 0; font-family:Consolas,"Cascadia Mono",monospace; font-size:12px;
+    overflow-x:auto; line-height:1.75;
+  }
+  ul.notes{margin:6px 0 0; padding-left:18px; font-size:12px; color:#4c6484}
+  ul.notes li{margin:3px 0}
+  code{font-family:Consolas,monospace; background:#f1f5fb; padding:1px 5px; border-radius:5px; font-size:11.5px}
+
+  /* 选项卡 ② 的文本域与生成器 */
+  textarea{
+    width:100%; min-height:150px; resize:vertical; border:1px solid var(--line); border-radius:9px;
+    background:#fbfcfe; color:var(--txt); font-family:Consolas,monospace; font-size:12px; line-height:1.7;
+    padding:8px 10px; outline:0;
+  }
+  textarea:focus{border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(29,95,208,.12)}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  #kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px}
+  #kpis .kpi{border:1px solid var(--line); border-radius:10px; background:#fafcff; padding:9px 11px}
+  #kpis .kpi .v{font-size:15px}
+
+  footer{max-width:1560px; margin:0 auto; padding:0 20px 34px; color:var(--dim); font-size:11.5px; line-height:1.6}
+  .foot-note{margin-bottom:5px}
+  .foot-meta{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--dim)}
+  .foot-meta .sep{opacity:.5}
+  .linkbtn{border:0; background:none; padding:0; color:var(--accent); font:inherit; font-size:11px;
+    cursor:pointer; text-decoration:underline; text-underline-offset:2px}
+  .linkbtn:hover{color:#0d3f8f}
+
+  /* 更新提示条 */
+  .updbar{
+    position:fixed; right:18px; bottom:18px; z-index:70; width:min(370px, calc(100vw - 36px));
+    background:#0f2f5c; color:#fff; border-radius:12px; padding:13px 15px;
+    font-size:12.5px; line-height:1.55; box-shadow:0 12px 32px rgba(9,25,48,.32);
+    animation:updIn .18s ease-out;
+  }
+  @keyframes updIn{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+  .updbar b{font-size:13.5px}
+  .updbar .udate{font-size:11.5px; opacity:.7}
+  .updbar .unotes{margin-top:5px; font-size:11.5px; opacity:.82; white-space:pre-wrap}
+  .updbar .row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap}
+  .updbar .btn{border-color:rgba(255,255,255,.38); background:rgba(255,255,255,.14);
+    color:#fff; padding:5px 11px; font-size:12px; text-decoration:none}
+  .updbar .btn:hover{background:rgba(255,255,255,.28); color:#fff; border-color:#fff}
+  .updbar .btn.primary{background:#fff; color:#12336b; border-color:#fff}
+  .updbar .btn.primary:hover{background:#eaf1fb; color:#12336b}
+
+  /* ================= 打印报告（黑白 A4） ================= */
+  #printReport{display:none}
+  @media print{
+    /* 页边距设 0 可让浏览器不再打印自带的页眉页脚（URL、日期、页码），
+       版心留白改由 #printReport 的 padding 提供 */
+    @page{size:A4; margin:0}
+    html,body{background:#fff !important; color:#000 !important}
+    body{font-size:10.5pt; line-height:1.6}
+    .topbar, main, footer, #tip, .updbar{display:none !important}
+    #printReport{display:block !important; max-width:100%; overflow-x:hidden;
+      padding:14mm 15mm 12mm;
+      font-family:"SimSun","宋体","Songti SC",serif; color:#000}
+    #printReport h1{font-family:"SimHei","黑体","Heiti SC",sans-serif; font-size:17pt; font-weight:700;
+      text-align:center; letter-spacing:3px; margin:0 0 3mm}
+    #printReport .meta{display:flex; flex-wrap:wrap; justify-content:space-between; gap:2mm;
+      font-size:8.5pt; border-bottom:1.2pt solid #000; padding-bottom:2mm; margin-bottom:5mm}
+    #printReport h2{font-family:"SimHei","黑体","Heiti SC",sans-serif; font-size:11pt; font-weight:700;
+      margin:5mm 0 2mm; padding:2mm 0 1mm; border-bottom:.6pt solid #000;
+      page-break-after:avoid; break-after:avoid; display:block}
+    #printReport h2.rpt-page{break-before:page; page-break-before:always; padding-top:10mm}
+    #printReport h2::before{content:none}
+    #printReport p{font-size:9.5pt; margin:0 0 2.5mm}
+    #printReport .rpt-tb, #printReport .rpt-kv{width:100%; border-collapse:collapse; font-size:9pt;
+      margin:0 0 3mm; page-break-inside:avoid}
+    #printReport th, #printReport td{border:.5pt solid #000; padding:1.4mm 1.8mm; text-align:right;
+      background:#fff !important; color:#000 !important; white-space:normal; word-break:break-word}
+    #printReport th{font-family:"SimHei","黑体",sans-serif; font-weight:700; text-align:center}
+    #printReport td.l{text-align:left}
+    #printReport .rpt-result{display:grid; grid-template-columns:repeat(4,1fr); border:.8pt solid #000;
+      margin:0 0 3.5mm; page-break-inside:avoid}
+    #printReport .rpt-result > div{padding:2.4mm 2.8mm; border-right:.5pt solid #000}
+    #printReport .rpt-result > div:last-child{border-right:0}
+    #printReport .rpt-result span{display:block; font-size:8pt}
+    #printReport .rpt-result b{font-size:12.5pt}
+    #printReport figure{margin:0 0 3mm; page-break-inside:avoid}
+    #printReport figure svg{width:100%; height:auto; display:block; border:.5pt solid #000}
+    #printReport figcaption{font-size:8pt; text-align:center; margin-top:1.5mm}
+    #printReport .rpt-formula{font-family:"Courier New",Consolas,monospace; font-size:8.5pt;
+      line-height:1.75; margin:0 0 3mm; white-space:pre-wrap; word-break:break-word}
+    #printReport ul{margin:0 0 3mm; padding-left:5mm; font-size:9pt}
+    #printReport li{margin:.8mm 0}
+    #printReport .foot{margin-top:5mm; padding-top:2mm; border-top:.5pt solid #000;
+      font-size:7.8pt; line-height:1.6}
+  }
+
+  @media (max-width:1120px){
+    .workbench{grid-template-columns:330px minmax(0,1fr)}
+    .lgrid{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:980px){
+    .workbench{grid-template-columns:1fr; padding:12px}
+    .rail{position:static; max-height:none; overflow:visible}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .kpi:nth-child(2){border-right:0}
+    .brand span{display:none}
+    .topbar{padding:6px 10px; gap:6px; min-height:0}
+    .brand b{font-size:15px}
+    .printbtn{order:2; margin-left:auto; padding:5px 9px; font-size:11.5px}
+    .tabs{order:3; margin-left:0; width:100%; padding:3px}
+    .tab{flex:1; text-align:center; padding:6px 8px; font-size:12.5px}
+  }
+  @media (max-width:560px){
+    .hero .val{font-size:38px}
+    .grid2{grid-template-columns:1fr}
+    .lgrid{grid-template-columns:1fr 1fr}
+    .qrow{flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><b>耐火材料温度计算器</b><span>炉衬外壁温度 · 降温曲线</span></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" type="button" data-panel="panelSteady">① 稳态计算</button>
+    <button class="tab" type="button" data-panel="panelCurve">② 降温曲线</button>
+  </nav>
+  <button class="btn printbtn" id="printBtn" type="button" title="生成黑白计算报告并调用浏览器打印（Ctrl+P 同样有效）">打印报告</button>
+</header>
+
+<main>
+  <!-- ================= 选项卡 ① ================= -->
+  <div class="panel" id="panelSteady">
+    <div class="workbench">
+
+      <!-- 左：参数栏 -->
+      <aside class="rail">
+        <section class="card">
+          <h2>边界与几何</h2>
+          <div class="modes">
+            <label><input type="radio" name="mode" value="surface" checked><span>内侧表面温度</span></label>
+            <label><input type="radio" name="mode" value="gas"><span>内侧气体温度</span></label>
+          </div>
+          <div class="modes" style="margin-top:6px">
+            <label><input type="radio" name="geo" value="plane" checked><span>平面壁</span></label>
+            <label><input type="radio" name="geo" value="cyl"><span>圆筒壁</span></label>
+          </div>
+
+          <div class="fields">
+            <div class="row2">
+              <label class="fld">
+                <span class="lbl"><span id="tInLabel">内侧表面温度 T₁</span></span>
+                <span class="inp"><input type="number" id="tIn" value="1000" step="10"><i>°C</i></span>
+              </label>
+              <label class="fld">
+                <span class="lbl">外侧环境 T∞</span>
+                <span class="inp"><input type="number" id="tAir" value="25" step="1"><i>°C</i></span>
+              </label>
+            </div>
+
+            <label class="fld hidden" id="hInField">
+              <span class="lbl">内表面换热系数 h₁ <i>火焰炉 60~90</i></span>
+              <span class="inp"><input type="number" id="hIn" value="82" step="1" min="0"><i>W/(m²·K)</i></span>
+            </label>
+
+            <label class="fld hidden" id="diaField">
+              <span class="lbl">圆筒内直径 D <i>外径 = D + 2×衬厚</i></span>
+              <span class="inp"><input type="number" id="diaIn" value="2000" step="50" min="1"><i>mm</i></span>
+            </label>
+
+            <label class="fld">
+              <span class="lbl">外表面换热系数 h₂ <i>表面 200 °C 约 15</i></span>
+              <span class="inp">
+                <input type="number" id="hOut" value="10" step="0.5" min="0">
+                <select id="hOutMode" style="max-width:118px">
+                  <option value="manual">手动</option>
+                  <option value="auto">自动 对流+辐射</option>
+                </select>
+              </span>
+            </label>
+
+            <div class="grid2 hidden" id="hAutoField">
+              <label class="fld">
+                <span class="lbl">表面发射率 ε</span>
+                <span class="inp"><input type="number" id="epsOut" value="0.8" step="0.05" min="0.01" max="1"></span>
+              </label>
+              <label class="fld">
+                <span class="lbl">特征高度 H</span>
+                <span class="inp"><input type="number" id="hChar" value="2" step="0.5" min="0.1"><i>m</i></span>
+              </label>
+            </div>
+            <div class="hint">h₂ 自动：h = 1.42(ΔT/H)^0.25 + εσ(T⁴−T∞⁴)/(T−T∞)，按表面温度迭代</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>炉衬层 <small>由内向外</small></h2>
+          <div id="layerBody" class="layers"></div>
+          <div class="row-actions">
+            <button class="btn" id="addLayer" type="button">＋ 添加一层</button>
+            <button class="btn ghost" id="resetAll" type="button">恢复默认</button>
+          </div>
+        </section>
+
+      </aside>
+
+      <!-- 右：结果 -->
+      <section class="stage">
+        <div id="msgs"></div>
+
+        <section class="card hero-card">
+          <div class="hero">
+            <div>
+              <div class="lbl">外表面温度 T_out</div>
+              <div class="val"><span id="tOut">—</span><span class="u">°C</span></div>
+            </div>
+            <div class="side" id="heroSide"></div>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><div class="k" id="qLabel">热流密度 q</div><div class="v"><span id="qVal">—</span><small id="qUnit">W/m²</small></div></div>
+            <div class="kpi"><div class="k" id="rLabel">总热阻 R</div><div class="v"><span id="rVal">—</span><small id="rUnit">m²·K/W</small></div></div>
+            <div class="kpi"><div class="k">内表面温度</div><div class="v"><span id="tInSurf">—</span><small>°C</small></div></div>
+            <div class="kpi"><div class="k">总厚度</div><div class="v"><span id="thkVal">—</span><small>mm</small></div></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>逐层温度分布 <button class="btn ghost mini" id="copyBtn" type="button" title="把当前结果复制为文本">复制结果</button></h2>
+          <div class="tablewrap">
+            <table id="resTable">
+              <thead>
+                <tr><th>层</th><th>热面 (°C)</th><th>冷面 (°C)</th><th>平均 (°C)</th><th>λ [W/(m·K)]</th><th>温降 (°C)</th></tr>
+              </thead>
+              <tbody id="resBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card" id="refCard">
+          <details>
+            <summary>计算原理与公式</summary>
+            <div class="body">
+              <p>一维稳态导热：通过每一层材料的热流密度 q 相等，各段温降与其热阻成正比。</p>
+              <div class="formula">热阻：R = δ / λ &nbsp;&nbsp;（δ 单位 m）<br>
+内表面对流：R₁ = 1 / h₁ &nbsp;&nbsp;&nbsp; 外表面对流+辐射：R₂ = 1 / h₂<br>
+总热阻：R_total = R₁ + Σ(δᵢ / λᵢ) + R₂<br>
+热流密度：q = (T_热侧 − T∞) / R_total<br>
+逐段降温：T_冷面 = T_热面 − q · δᵢ / λᵢ<br>
+外表面温度：T_out = T∞ + q · R₂ = T∞ + q / h₂</div>
+              <p><b>圆筒壁（炉膛，按每米长度计算）：</b></p>
+              <div class="formula">每层热阻：R_L,i = ln(r_{i+1} / r_i) / (2π·λᵢ)<br>
+内/外表面对流：R₁ = 1/(2π·r₁·h₁)，R₂ = 1/(2π·r_N·h₂)<br>
+线热流：q_L = (T_热侧 − T∞) / (R₁ + ΣR_L,i + R₂) &nbsp; [W/m]<br>
+外表面热流密度：q″ = q_L / (2π·r_N) &nbsp; [W/m²]</div>
+              <p><b>外表面换热系数（自动模式）：</b></p>
+              <div class="formula">h₂ = h_conv + h_rad<br>
+h_conv = 1.42·(ΔT / H)^0.25 &nbsp;（竖壁空气自然对流，层流）<br>
+h_rad = ε·σ·(T_s⁴ − T∞⁴) / (T_s − T∞)，σ = 5.67×10⁻⁸</div>
+              <p>若只给内侧表面温度（不外给 h₁），则应取 R₁ = 0，直接由内表面温度开始逐层降温，结果与上式一致。</p>
+              <p>导热系数随温度变化时（λ = λ₀ + b·t），λ 依赖于尚未求出的温度，程序用迭代法求解：先假设各层温度，算出温度场后用 <b>该层两端温度的算术平均</b> 更新 λ（对线性 λ(t) 这恰等于严格的积分平均 λ̄ = λ₀ + b(t₁+t₂)/2），反复迭代至收敛（通常 3~6 次）。</p>
+              <p><b>重要说明：</b>仅凭「厚度 + 导热系数 + 内侧温度」无法唯一确定外侧温度——还必须知道外侧向环境散热的能力（h₂ 与环境温度），否则只能得到 q·δ/λ 的温降关系式。本工具采用工程上最常用的「外侧对流+辐射换热」边界条件。</p>
+              <ul class="notes">
+                <li>假设：一维稳态、材料均质、λ 取各层平均温度对应值、忽略层间接触热阻与内表面结焦/积灰。圆筒壁按每米长度计算（不计端部散热）。</li>
+                <li>外表面温度高于 60 °C 时存在烫伤风险；GB/T 3486 规定环境 25 °C 时工业锅炉外壁表面平均温度不得超过 50 °C；一般钢制炉壳建议控制在 80~100 °C 以内。</li>
+                <li>h₂ 在高温下辐射占比很大（表面 200 °C 时辐射约占 2/3），建议用「自动（对流+辐射）」或按表面温度查综合值，而不是固定取 10。</li>
+                <li>圆筒壁与平壁差异：内径 2 m、衬厚 345 mm 时，平壁近似会把外表面温度高估约 7%；内径越大越接近平壁。</li>
+              </ul>
+            </div>
+          </details>
+        </section>
+      </section>
+    </div>
+  </div>
+
+  <!-- ================= 选项卡 ② ================= -->
+  <div class="panel hidden" id="panelCurve">
+    <div class="workbench">
+
+      <aside class="rail">
+        <section class="card">
+          <h2>数据来源</h2>
+          <div class="modes">
+            <label><input type="radio" name="srcMode" value="sync" checked><span>由稳态同步</span></label>
+            <label><input type="radio" name="srcMode" value="manual"><span>手动输入</span></label>
+          </div>
+
+          <div class="fields">
+            <label class="fld">
+              <span class="lbl">时间单位</span>
+              <span class="inp">
+                <select id="timeUnit">
+                  <option value="s">秒 s</option>
+                  <option value="min">分 min</option>
+                  <option value="h" selected>小时 h</option>
+                </select>
+              </span>
+            </label>
+
+            <div class="grid2 syncOnly">
+              <label class="fld">
+                <span class="lbl">停炉后计算时长</span>
+                <span class="inp"><input type="number" id="tcEnd" value="24" step="1" min="0.1"></span>
+              </label>
+              <label class="fld">
+                <span class="lbl">曲线点数</span>
+                <span class="inp"><input type="number" id="tcPoints" value="121" step="1" min="11" max="601"></span>
+              </label>
+            </div>
+
+            <label class="fld syncOnly">
+              <span class="lbl">停炉后内侧边界</span>
+              <span class="inp">
+                <select id="innerMode">
+                  <option value="adiabatic" selected>绝热（炉门关闭）</option>
+                  <option value="fixed">恒温（维持内侧温度）</option>
+                  <option value="conv">与内侧气体换热</option>
+                </select>
+              </span>
+            </label>
+
+            <div class="grid2 syncOnly hidden" id="tcHinWrap">
+              <label class="fld">
+                <span class="lbl">内侧换热系数 h₁</span>
+                <span class="inp"><input type="number" id="tcHin" value="15" step="1" min="0.1"><i>W/(m²·K)</i></span>
+              </label>
+              <label class="fld" id="tcTinWrap">
+                <span class="lbl">内侧气体温度</span>
+                <span class="inp"><input type="number" id="tcTin" value="25" step="5"><i>°C</i></span>
+              </label>
+            </div>
+          </div>
+
+          <div id="syncInfo" class="msg info" style="margin-top:10px"></div>
+
+          <div id="manualPane" class="hidden" style="margin-top:10px">
+            <label class="fld">
+              <span class="lbl">时间 / 温度 数据点 <i>可从 Excel 粘贴</i></span>
+              <textarea id="dataBox" spellcheck="false"></textarea>
+            </label>
+            <div class="row-actions">
+              <button class="btn" id="loadDemo" type="button">载入示例</button>
+              <button class="btn ghost" id="clearAll" type="button">清空</button>
+            </div>
+            <details style="margin-top:8px">
+              <summary>按指数冷却模型生成</summary>
+              <div class="body">
+                <div class="formula">T(t) = T∞ + (T₀ − T∞)·e^(−t/τ)</div>
+                <div class="grid2" style="margin-top:6px">
+                  <label class="fld"><span class="lbl">T₀ (°C)</span><span class="inp"><input type="number" id="gT0" value="1000" step="10"></span></label>
+                  <label class="fld"><span class="lbl">T∞ (°C)</span><span class="inp"><input type="number" id="gTa" value="25" step="5"></span></label>
+                  <label class="fld"><span class="lbl">τ</span><span class="inp"><input type="number" id="gTau" value="6" step="0.5" min="0.01"></span></label>
+                  <label class="fld"><span class="lbl">总时长</span><span class="inp"><input type="number" id="gEnd" value="24" step="1" min="0.1"></span></label>
+                  <label class="fld"><span class="lbl">取点间隔</span><span class="inp"><input type="number" id="gStep" value="1" step="0.1" min="0.01"></span></label>
+                  <label class="fld"><span class="lbl">&nbsp;</span><button class="btn primary" id="genBtn" type="button" style="width:100%">生成</button></label>
+                </div>
+              </div>
+            </details>
+          </div>
+        </section>
+        <section class="card">
+          <h2>数据概览</h2>
+          <div class="kpis" id="kpis"></div>
+          <details style="margin-top:10px">
+            <summary>瞬态计算模型与说明</summary>
+            <div class="body">
+              <p><b>同步模式（瞬态导热）：</b>把选项卡 ① 算出的稳态温度场作为 t = 0 的初始条件，用一维瞬态导热方程做有限体积离散，时间方向取 Crank-Nicolson 隐式格式（Thomas 追赶法）：</p>
+              <div class="formula">平面壁：ρc ∂T/∂t = ∂/∂x ( λ(T) ∂T/∂x )<br>
+圆筒壁：ρc ∂T/∂t = (1/r)·∂/∂r ( r·λ(T) ∂T/∂r )<br>
+界面导热系数按该面所跨各层材料的串联热阻求等效值<br>
+外表面： −λ ∂T/∂n = h₂(T_s)·(T − T∞) &nbsp;&nbsp;（内侧绝热时 ∂T/∂n = 0）<br>
+时间步长几何递增：起始 Δt ≈ 0.5·ρc·ΔV/(2λ·A)，之后每步 ×1.06，最长 ≈ 总时长/50<br>
+Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0.0000%）</div>
+              <ul class="notes">
+                <li><b>内侧边界</b>：绝热 = 停炉后炉门关闭；恒温 = 内侧温度维持不变；换热 = 内表面按 h₁ 与内侧气体换热。</li>
+                <li>曲线为各层界面温度：内表面、每个层间界面、外表面（炉壳）。</li>
+                <li>λ 按 λ(t) = λ₀ + b·t 逐点更新；忽略接触热阻、辐射的内部传递与材料相变。</li>
+                <li>网格约 2.5 mm（厚 0.35 m 时约 140 节点）；隐式格式无稳定性限制，时长再长也不降精度。</li>
+                <li>查询值由相邻输出点线性插值；曲线非单调时同一温度可能对应多个时间，会全部列出。</li>
+              </ul>
+            </div>
+          </details>
+        </section>
+
+      </aside>
+
+      <section class="stage">
+        <section class="card qcard">
+          <h2>双向查询</h2>
+          <div class="qbox">
+            <div class="t"><span class="dot g"></span>按时间 → 查温度</div>
+            <div class="qrow">
+              <span class="inp"><input type="number" id="qTime" step="0.1" placeholder="例如 5.5"></span>
+              <span class="unit" id="unitTag1">h</span>
+            </div>
+            <div class="qres" id="resTime">请输入时间，或把鼠标移到曲线上查看。</div>
+          </div>
+          <div class="qbox">
+            <div class="t"><span class="dot o"></span>按温度 → 查时间</div>
+            <div class="qrow">
+              <span class="inp"><input type="number" id="qTemp" step="1" placeholder="例如 60"></span>
+              <span class="unit">°C</span>
+            </div>
+            <div class="qres" id="resTemp">输入温度，查询降到该温度所需的时间。</div>
+          </div>
+          <div id="kMsgs"></div>
+          <div class="hint">在图上单击可把该处时间填入查询框；点击图例可隐藏／显示曲线。</div>
+        </section>
+
+        <section class="card">
+          <h2>温度随时间变化</h2>
+          <div class="chartwrap" id="chartWrap"><div id="tip"></div></div>
+          <div class="legend" id="kLegend"></div>
+        </section>
+
+        
+      </section>
+    </div>
+  </div>
+</main>
+
+<section id="printReport" aria-hidden="true"></section>
+
+<footer>
+  <div class="foot-note">单文件纯前端页面，数据不上传服务器，刷新后自定义数据不保留。结果基于理想化一维模型，仅供工程估算参考；设计与安全校核请以材料厂家导热数据、相关标准及实测结果为准。</div>
+  <div class="foot-meta">
+    <span id="verLabel">v—</span>
+    <span class="sep">·</span>
+    <button class="linkbtn" id="checkUpd" type="button">检查更新</button>
+  </div>
+</footer>
+
+<script>
+
+(function(){
+  "use strict";
+
+  /* ---------------- 常用耐火材料参考值（ρ、c 为典型值，供瞬态降温计算用） ---------------- */
+  var PRESETS = [
+    {n:"粘土砖",        l0:0.70,  b:0.00058,  rho:2100, c:1000},
+    {n:"高铝砖",        l0:1.16,  b:0.00058,  rho:2400, c:1000},
+    {n:"硅砖",          l0:0.93,  b:0.00070,  rho:1900, c:1000},
+    {n:"镁砖",          l0:5.00,  b:-0.00270, rho:2800, c:1050},
+    {n:"刚玉砖",        l0:2.30,  b:-0.00040, rho:3000, c:1000},
+    {n:"轻质粘土砖",    l0:0.29,  b:0.00026,  rho:1000, c:1000},
+    {n:"轻质高铝砖",    l0:0.47,  b:0.00026,  rho:1200, c:1000},
+    {n:"耐火浇注料",    l0:0.90,  b:0.00050,  rho:2200, c:1000},
+    {n:"硅酸铝纤维毯",  l0:0.045, b:0.00020,  rho:128,  c:1000},
+    {n:"保温板/硅钙板", l0:0.065, b:0.00012,  rho:220,  c:900},
+    {n:"耐火纤维浇注料",l0:0.12,  b:0.00020,  rho:600,  c:1000}
+  ];
+
+  var DEFAULTS = [
+    {name:"粘土砖工作层",     d:230, l0:0.70, b:0.00058, rho:2100, c:1000, preset:"粘土砖"},
+    {name:"轻质粘土砖保温层", d:115, l0:0.29, b:0.00026, rho:1000, c:1000, preset:"轻质粘土砖"}
+  ];
+
+  var $ = function(s){ return document.querySelector(s); };
+  var body = $("#layerBody");
+
+  function num(sel){
+    var el = $(sel);
+    if(!el) return NaN;
+    var v = parseFloat(el.value);
+    return Number.isFinite(v) ? v : NaN;
+  }
+  function fmt(x, d){
+    if(!Number.isFinite(x)) return "—";
+    if(d === undefined) d = 1;
+    var s = x.toFixed(d);
+    if(s === "-0.0" || s === "-0.00" || s === "-0.000") s = s.slice(1);
+    return s;
+  }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  /* ---------------- 层表格 ---------------- */
+  function presetOptions(sel){
+    var html = '<option value="">自定义</option>';
+    PRESETS.forEach(function(p, i){
+      html += '<option value="' + i + '"' + (sel === p.n ? " selected" : "") + '>' +
+              esc(p.n) + "（" + p.l0 + "）</option>";
+    });
+    return html;
+  }
+
+  function addRow(data){
+    data = data || {name:"", d:100, l0:1.0, b:0, rho:2000, c:1000, preset:""};
+    var tr = document.createElement("div");
+    tr.className = "lrow";
+    tr.innerHTML =
+      '<div class="lhead"><input class="lname" type="text" placeholder="层名称" value="' + esc(data.name) + '">' +
+      '<button class="btn danger" type="button" title="删除该层">×</button></div>' +
+      '<div class="lgrid">' +
+        '<label>δ<i>mm</i><input class="ld" type="number" step="1" min="0" value="' + data.d + '"></label>' +
+        '<label>λ₀<i>W/m·K</i><input class="ll0" type="number" step="0.01" min="0" value="' + data.l0 + '"></label>' +
+        '<label>b<i>W/m·K²</i><input class="lb" type="number" step="0.0001" value="' + data.b + '"></label>' +
+        '<label>ρ<i>kg/m³</i><input class="lrho" type="number" step="10" min="1" value="' + data.rho + '"></label>' +
+        '<label>c<i>J/kg·K</i><input class="lc" type="number" step="10" min="1" value="' + data.c + '"></label>' +
+        '<label class="presetWrap"><select class="lpreset">' + presetOptions(data.preset) + '</select></label>' +
+      '</div>';
+    body.appendChild(tr);
+
+    tr.querySelector(".lpreset").addEventListener("change", function(){
+      var i = this.value;
+      if(i === "") return;
+      var p = PRESETS[+i];
+      tr.querySelector(".ll0").value = p.l0;
+      tr.querySelector(".lb").value = p.b;
+      tr.querySelector(".lrho").value = p.rho;
+      tr.querySelector(".lc").value = p.c;
+      var nm = tr.querySelector(".lname");
+      if(!nm.value.trim()) nm.value = p.n;
+      compute();
+    });
+    tr.querySelector(".danger").addEventListener("click", function(){
+      if(body.querySelectorAll(".lrow").length <= 1){ alert("至少保留一层材料"); return; }
+      tr.remove();
+      compute();
+    });
+  }
+
+  function readLayers(){
+    return Array.prototype.map.call(body.querySelectorAll(".lrow"), function(tr){
+      var bv = tr.querySelector(".lb").value.trim();
+      return {
+        name: tr.querySelector(".lname").value.trim() || "材料层",
+        d: parseFloat(tr.querySelector(".ld").value),
+        l0: parseFloat(tr.querySelector(".ll0").value),
+        b: bv === "" ? 0 : parseFloat(bv),
+        rho: parseFloat(tr.querySelector(".lrho").value),
+        c: parseFloat(tr.querySelector(".lc").value)
+      };
+    });
+  }
+
+  function setDefaults(){
+    body.innerHTML = "";
+    DEFAULTS.forEach(addRow);
+    $("input[name=mode][value=surface]").checked = true;
+    $("input[name=geo][value=plane]").checked = true;
+    $("#tIn").value = 1000;
+    $("#tAir").value = 25;
+    $("#hOut").value = 10;
+    $("#hIn").value = 82;
+    $("#hOutMode").value = "manual";
+    $("#epsOut").value = 0.8;
+    $("#hChar").value = 2;
+    $("#diaIn").value = 2000;
+    syncMode();
+    compute();
+  }
+
+  /* ---------------- 界面联动 ---------------- */
+  function syncMode(){
+    var gas = $("input[name=mode]:checked").value === "gas";
+    var cyl = geoMode() === "cyl";
+    var auto = $("#hOutMode").value === "auto";
+    $("#hInField").classList.toggle("hidden", !gas);
+    $("#diaField").classList.toggle("hidden", !cyl);
+    $("#hAutoField").classList.toggle("hidden", !auto);
+    $("#hOut").disabled = auto;
+    $("#hOut").style.opacity = auto ? 0.5 : 1;
+    $("#tInLabel").textContent = gas ? "内侧气体温度 T₁ (°C)" : "内侧表面温度 T₁ (°C)";
+  }
+
+  /* ---------------- 几何与表面换热系数 ---------------- */
+  var SIGMA = 5.67e-8;
+  function geoMode(){
+    var el = document.querySelector("input[name=geo]:checked");
+    return el && el.value === "cyl" ? "cyl" : "plane";
+  }
+  // 自然对流（竖壁层流）+ 辐射 的综合表面换热系数
+  function h2Parts(tSurf, tAir, eps, H){
+    var dT = tSurf - tAir;
+    var hc = dT > 0 ? 1.42 * Math.pow(dT / Math.max(H, 0.05), 0.25) : 0;
+    var Ts = tSurf + 273.15, Ta = tAir + 273.15;
+    var hr = 0;
+    if(Math.abs(Ts - Ta) > 1e-9){
+      hr = eps * SIGMA * (Math.pow(Ts, 4) - Math.pow(Ta, 4)) / (Ts - Ta);
+    }
+    return {conv: hc, rad: hr, total: hc + hr};
+  }
+
+  /* ---------------- 核心计算 ---------------- */
+  function calculate(){
+    var mode = $("input[name=mode]:checked").value;
+    var geo  = geoMode();
+    var tIn  = num("#tIn");
+    var tAir = num("#tAir");
+    var hIn  = num("#hIn");
+    var layers = readLayers();
+    var hOutMode = $("#hOutMode").value;
+    var autoH = hOutMode === "auto";
+    var hOutManual = num("#hOut");
+    var eps = num("#epsOut"), H = num("#hChar");
+    var dIn = num("#diaIn");
+
+    var errs = [];
+    if(!layers.length) errs.push("至少需要一层材料。");
+    layers.forEach(function(L, i){
+      if(!Number.isFinite(L.d) || L.d <= 0) errs.push("第 " + (i+1) + " 层厚度必须大于 0。");
+      if(!Number.isFinite(L.l0) || L.l0 <= 0) errs.push("第 " + (i+1) + " 层导热系数 λ₀ 必须大于 0。");
+      if(!Number.isFinite(L.b)) errs.push("第 " + (i+1) + " 层温度系数 b 格式有误。");
+      if(!Number.isFinite(L.rho) || L.rho <= 0) errs.push("第 " + (i+1) + " 层密度 ρ 必须大于 0。");
+      if(!Number.isFinite(L.c) || L.c <= 0) errs.push("第 " + (i+1) + " 层比热 c 必须大于 0。");
+    });
+    if(!Number.isFinite(tIn))  errs.push("内侧温度输入无效。");
+    if(!Number.isFinite(tAir)) errs.push("外侧环境温度输入无效。");
+    if(autoH){
+      if(!Number.isFinite(eps) || eps <= 0 || eps > 1) errs.push("表面发射率 ε 应在 0 ~ 1 之间。");
+      if(!Number.isFinite(H) || H <= 0) errs.push("特征高度 H 必须大于 0。");
+    } else if(!Number.isFinite(hOutManual) || hOutManual <= 0){
+      errs.push("外表面换热系数 h₂ 必须大于 0。");
+    }
+    if(mode === "gas" && (!Number.isFinite(hIn) || hIn <= 0)) errs.push("内表面换热系数 h₁ 必须大于 0。");
+    if(geo === "cyl" && (!Number.isFinite(dIn) || dIn <= 0)) errs.push("圆筒内直径 D 必须大于 0。");
+    if(errs.length) return {ok:false, errors:errs};
+
+    var LAM_MIN = 0.005;
+    var totalD = layers.reduce(function(a, L){ return a + L.d / 1000; }, 0);
+    var r1 = geo === "cyl" ? dIn / 2000 : 0;
+    var rOut = geo === "cyl" ? r1 + totalD : 1;
+
+    // 给定 h₂ 求稳态解（λ 迭代）
+    function solveWith(h2){
+      var lam = layers.map(function(L){ return Math.max(LAM_MIN, L.l0 + L.b * tIn); });
+      var clamped = false, iters = 0;
+      function pass(lamArr){
+        var R = [], r = r1;
+        for(var i = 0; i < layers.length; i++){
+          var d = layers[i].d / 1000;
+          if(geo === "cyl"){
+            R.push(Math.log((r + d) / r) / (2 * Math.PI * lamArr[i]));
+            r += d;
+          } else {
+            R.push(d / lamArr[i]);
+          }
+        }
+        var RconvIn = 0;
+        if(mode === "gas") RconvIn = (geo === "cyl") ? 1 / (2 * Math.PI * r1 * hIn) : 1 / hIn;
+        var RconvOut = (geo === "cyl") ? 1 / (2 * Math.PI * rOut * h2) : 1 / h2;
+        var Rsum = R.concat([RconvIn, RconvOut]).reduce(function(a, b){ return a + b; }, 0);
+        var q = (tIn - tAir) / Rsum;
+        var T = (mode === "gas") ? tIn - q * RconvIn : tIn;
+        var st = [T];
+        for(var i2 = 0; i2 < layers.length; i2++){ T -= q * R[i2]; st.push(T); }
+        return {q:q, R:R, Rtot:Rsum, surf:st, tInner:st[0], RconvIn:RconvIn, RconvOut:RconvOut};
+      }
+      for(; iters < 200; iters++){
+        var res = pass(lam);
+        var maxd = 0;
+        var next = layers.map(function(L, i){
+          var tavg = (res.surf[i] + res.surf[i + 1]) / 2;
+          var v = L.l0 + L.b * tavg;
+          if(v < LAM_MIN){ v = LAM_MIN; clamped = true; }
+          maxd = Math.max(maxd, Math.abs(v - lam[i]));
+          return v;
+        });
+        var conv = maxd < 1e-7;
+        lam = next;
+        if(conv){ iters++; break; }
+      }
+      var fin = pass(lam);
+      fin.lam = lam; fin.iters = iters; fin.clamped = clamped;
+      return fin;
+    }
+
+    var h2 = autoH ? 12 : hOutManual;
+    var fin = solveWith(h2);
+    var parts = null;
+    if(autoH){
+      for(var k = 0; k < 100; k++){
+        parts = h2Parts(fin.surf[fin.surf.length - 1], tAir, eps, H);
+        if(Math.abs(parts.total - h2) < 1e-7) break;
+        h2 = 0.5 * (h2 + parts.total);
+        fin = solveWith(h2);
+      }
+      parts = h2Parts(fin.surf[fin.surf.length - 1], tAir, eps, H);
+      h2 = parts.total;
+      fin = solveWith(h2);                       // 用收敛后的 h₂ 再解一次，保证自洽
+    }
+
+    return {
+      ok:true, mode:mode, geo:geo, layers:layers, lam:fin.lam, q:fin.q, surf:fin.surf,
+      tInnerSurf:fin.tInner, tAir:tAir, hOut:h2, hOutAuto:autoH,
+      h2Conv: parts ? parts.conv : null, h2Rad: parts ? parts.rad : null,
+      hIn:hIn, tIn:tIn, Rtot:fin.Rtot, R:fin.R, iters:fin.iters, clamped:fin.clamped,
+      totalThk: layers.reduce(function(a, L){ return a + L.d; }, 0),
+      r1:r1, rOut:rOut, dIn: geo === "cyl" ? dIn : null,
+      tOut: fin.surf[fin.surf.length - 1]
+    };
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  var lastResult = null;
+
+  function render(){
+    var r = calculate();
+    var msgs = $("#msgs");
+    msgs.innerHTML = "";
+
+    if(!r.ok){
+      lastResult = null;
+      msgs.innerHTML = r.errors.map(function(e){
+        return '<div class="msg err">' + esc(e) + '</div>';
+      }).join("");
+      $("#tOut").textContent = "—";
+      $("#heroSide").innerHTML = "";
+      $("#qVal").textContent = "—";
+      $("#rVal").textContent = "—";
+      $("#tInSurf").textContent = "—";
+      $("#thkVal").textContent = "—";
+      $("#resBody").innerHTML = "";
+      return;
+    }
+    lastResult = r;
+
+    var isCyl = r.geo === "cyl";
+    $("#qLabel").textContent = isCyl ? "线热流 q_L" : "热流密度 q";
+    $("#qUnit").textContent  = isCyl ? "W/m" : "W/m²";
+    $("#rLabel").textContent = isCyl ? "总热阻 R_L" : "总热阻 R";
+    $("#rUnit").textContent  = isCyl ? "m·K/W" : "m²·K/W";
+
+    $("#tOut").textContent = fmt(r.tOut, 1);
+    $("#heroSide").innerHTML =
+      "温降 " + fmt(r.tInnerSurf - r.tOut, 1) + " °C<br>" +
+      (r.hOutAuto ? "h₂ 自动 ≈ " + fmt(r.hOut, 1) : "迭代 " + r.iters + " 次（λ 随温度修正）");
+
+    $("#qVal").textContent = fmt(r.q, 1);
+    $("#rVal").textContent = fmt(r.Rtot, 4);
+    $("#tInSurf").textContent = fmt(r.tInnerSurf, 1);
+    $("#thkVal").textContent = fmt(r.totalThk, 0);
+
+    var rows = "";
+    r.layers.forEach(function(L, i){
+      var th = r.surf[i], tc = r.surf[i+1];
+      rows += "<tr>" +
+        "<td>" + esc(L.name) + "</td>" +
+        "<td>" + fmt(th, 1) + "</td>" +
+        "<td>" + fmt(tc, 1) + "</td>" +
+        "<td>" + fmt((th + tc) / 2, 1) + "</td>" +
+        "<td>" + fmt(r.lam[i], 3) + "</td>" +
+        "<td>" + fmt(th - tc, 1) + "</td></tr>";
+    });
+    // 外表面散热带
+    rows += "<tr style='background:#fafcff'>" +
+      "<td>外表面→环境</td>" +
+      "<td>" + fmt(r.tOut, 1) + "</td>" +
+      "<td>" + fmt(r.tAir, 1) + "</td>" +
+      "<td>" + fmt((r.tOut + r.tAir) / 2, 1) + "</td>" +
+      "<td>h₂=" + fmt(r.hOut, 1) + "</td>" +
+      "<td>" + fmt(r.tOut - r.tAir, 1) + "</td></tr>";
+    if(r.mode === "gas"){
+      rows = "<tr style='background:#fafcff'>" +
+        "<td>气体→内表面</td>" +
+        "<td>" + fmt(r.tIn, 1) + "</td>" +
+        "<td>" + fmt(r.tInnerSurf, 1) + "</td>" +
+        "<td>" + fmt((r.tIn + r.tInnerSurf) / 2, 1) + "</td>" +
+        "<td>h₁=" + fmt(r.hIn, 1) + "</td>" +
+        "<td>" + fmt(r.tIn - r.tInnerSurf, 1) + "</td></tr>" + rows;
+    }
+    $("#resBody").innerHTML = rows;
+
+
+    // 提示信息
+    var tips = [];
+    if(isCyl){
+      var qOutArea = r.q / (2 * Math.PI * r.rOut);
+      var qInArea  = r.q / (2 * Math.PI * r.r1);
+      tips.push('<div class="msg info"><b>圆筒壁：</b>内径 ' + fmt(r.dIn, 0) + ' mm → 外径 ' +
+        fmt(r.rOut * 2000, 0) + ' mm（衬厚 ' + fmt(r.totalThk, 0) + ' mm）；线热流 q_L = ' + fmt(r.q, 1) +
+        ' W/m，外表面热流密度 ' + fmt(qOutArea, 1) + ' W/m²，内表面 ' + fmt(qInArea, 1) + ' W/m²。</div>');
+    }
+    if(r.hOutAuto){
+      tips.push('<div class="msg info"><b>h₂ 自动计算：</b>' + fmt(r.hOut, 2) + ' W/(m²·K) = 自然对流 ' +
+        fmt(r.h2Conv, 2) + ' + 辐射 ' + fmt(r.h2Rad, 2) + '（ε = ' + fmt(num("#epsOut"), 2) +
+        '，特征高度 H = ' + fmt(num("#hChar"), 2) + ' m，按外表面温度迭代求得）。</div>');
+    }
+    if(r.q < 0){
+      tips.push('<div class="msg warn"><b>反向传热：</b>内侧温度低于外侧环境温度，热流由外向内（q 为负）。此时"外表面温度"仍按同一公式给出。</div>');
+    }
+    if(r.tOut > 60){
+      tips.push('<div class="msg warn"><b>外表面 ' + fmt(r.tOut, 1) + ' °C</b>：高于 60 °C 有烫伤风险，且超出 GB/T 3486 的 50 °C 限值' +
+        (r.tOut > 100 ? '；已超钢制炉壳常规范围（80~100 °C），建议加厚保温层或加强通风。' : '，建议设防护栏或隔热层。') + '</div>');
+    } else if(r.tOut > 50){
+      tips.push('<div class="msg warn"><b>外表面 ' + fmt(r.tOut, 1) + ' °C</b>：未达烫伤阈值（60 °C），但超出 GB/T 3486 的 50 °C 限值。</div>');
+    } else if(r.tOut >= 0){
+      tips.push('<div class="msg ok"><b>外表面 ' + fmt(r.tOut, 1) + ' °C</b>：低于 50 °C，接触安全且满足 GB/T 3486。</div>');
+    }
+    if(r.clamped){
+      tips.push('<div class="msg warn"><b>提示：</b>某层导热系数按 λ(t)=λ₀+b·t 计算出现非正值，已按下限 0.005 W/(m·K) 取值，请检查温度系数 b。</div>');
+    }
+    if(r.tOut < 0){
+      tips.push('<div class="msg info">外表面温度低于 0 °C，请注意是否存在结露或冻堵风险。</div>');
+    }
+    msgs.innerHTML = tips.join("");
+  }
+
+  function compute(){ render(); notify(); }
+
+  /* ---------------- 对外同步接口（供选项卡 ② 的瞬态降温计算使用） ---------------- */
+  var syncListeners = [];
+  function notify(){
+    var r = lastResult;
+    syncListeners.forEach(function(fn){
+      try{ fn(r); }catch(err){ /* 单个订阅者出错不影响稳态计算 */ }
+    });
+  }
+  window.SteadySolver = {
+    // 返回最近一次稳态计算结果（ok:true 时含 layers / surf / lam / q / tAir / hOut / tIn / mode 等）
+    result: function(){ return lastResult; },
+    // 需要时立即重算并返回最新结果
+    compute: function(){ compute(); return lastResult; },
+    subscribe: function(fn){
+      syncListeners.push(fn);
+      try{ fn(lastResult); }catch(err){}
+    }
+  };
+
+  /* ---------------- 事件 ---------------- */
+  document.addEventListener("input", function(e){
+    if(e.target.closest("#panelSteady")) compute();
+  });
+  document.addEventListener("change", function(e){
+    var t = e.target;
+    if(t.name === "mode" || t.name === "geo" || t.id === "hOutMode"){ syncMode(); compute(); }
+  });
+  $("#addLayer").addEventListener("click", function(){
+    addRow({name:"", d:100, l0:0.5, b:0, rho:2000, c:1000, preset:""});
+    compute();
+  });
+  $("#resetAll").addEventListener("click", setDefaults);
+
+  $("#copyBtn").addEventListener("click", function(){
+    if(!lastResult){ alert("暂无可复制的结果"); return; }
+    var r = lastResult;
+    var lines = [];
+    lines.push("耐火材料外壁温度计算");
+    lines.push("内侧" + (r.mode === "gas" ? "气体" : "表面") + "温度: " + fmt(r.tIn, 1) + " °C");
+    lines.push("外侧环境温度: " + fmt(r.tAir, 1) + " °C，外表面换热系数 h₂ = " + fmt(r.hOut, 1) + " W/(m²·K)");
+    if(r.mode === "gas") lines.push("内表面换热系数 h₁ = " + fmt(r.hIn, 1) + " W/(m²·K)");
+    r.layers.forEach(function(L, i){
+      lines.push("第" + (i+1) + "层 " + L.name + ": δ=" + fmt(L.d, 0) + " mm, λ₀=" + L.l0 + ", b=" + L.b +
+                 ", ρ=" + L.rho + " kg/m³, c=" + L.c + " J/(kg·K), λ(avg)=" + fmt(r.lam[i], 3));
+    });
+    lines.push("---- 结果 ----");
+    lines.push("外表面温度 T_out = " + fmt(r.tOut, 1) + " °C");
+    lines.push("热流密度 q = " + fmt(r.q, 1) + " W/m²");
+    lines.push("总热阻 R = " + fmt(r.Rtot, 4) + " m²·K/W");
+    r.layers.forEach(function(L, i){
+      lines.push("  " + L.name + ": " + fmt(r.surf[i], 1) + " → " + fmt(r.surf[i+1], 1) + " °C");
+    });
+    var txt = lines.join("\n");
+    function done(okMsg){ var b = $("#copyBtn"); var old = b.textContent; b.textContent = okMsg; setTimeout(function(){ b.textContent = old; }, 1400); }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ done("已复制 ✓"); }, function(){ fallback(txt, done); });
+    } else { fallback(txt, done); }
+  });
+
+  function fallback(txt, done){
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); done("已复制 ✓"); }catch(e){ done("复制失败"); }
+    document.body.removeChild(ta);
+  }
+
+  /* ---------------- 启动 ---------------- */
+  setDefaults();
+})();
+
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var W = 940, H = 470, mL = 78, mR = 34, mT = 30, mB = 58;
+  var pw = W - mL - mR, ph = H - mT - mB;
+  var PALETTE = ["#1d5fd0", "#e2542a", "#0e9488", "#a86400", "#7b3fa0", "#c2185b", "#00838f", "#4c6484"];
+
+  var $ = function(s){ return document.querySelector(s); };
+  var wrap = $("#chartWrap"), tip = $("#tip");
+
+  var series = [];      // [{name, color, pts:[{t,T}], visible}]
+  var view = null, hov = null, qTime = null, qTemps = [];
+  var envT = NaN;       // 环境温度参考线（可为 NaN 表示不画）
+  var badLines = 0;
+  var lastInfo = "";
+  var ready = false;
+
+  /* ---------------- 工具函数 ---------------- */
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function fmt(x, d){
+    if(!Number.isFinite(x)) return "—";
+    if(d === undefined) d = 1;
+    var s = x.toFixed(d);
+    if(/^-0\.0*$/.test(s)) s = s.slice(1);
+    return s;
+  }
+  function num(sel){
+    var el = $(sel);
+    if(!el) return NaN;
+    var v = parseFloat(el.value);
+    return Number.isFinite(v) ? v : NaN;
+  }
+  function unitText(){ return $("#timeUnit").value; }
+  function unitFactor(){
+    var u = unitText();
+    return u === "s" ? 1 : (u === "min" ? 60 : 3600);
+  }
+  function niceStep(range, count){
+    var raw = range / Math.max(count, 1);
+    var mag = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+    var n = raw / mag;
+    var m = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+    return m * mag;
+  }
+  function ticks(min, max, count){
+    var step = niceStep(max - min, count);
+    var out = [], v = Math.ceil(min / step) * step;
+    for(; v <= max + step * 1e-6; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+  function sortByT(a, b){ return a.t - b.t; }
+
+  /* ---------------- 曲线插值 ---------------- */
+  function T_at(pts, t){
+    if(!pts || pts.length === 0) return null;
+    if(pts.length === 1) return {t:pts[0].t, T:pts[0].T, exact:(pts[0].t === t), outside:(pts[0].t !== t)};
+    var t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+    if(t < t0) return {t:t0, T:pts[0].T, outside:"low"};
+    if(t > t1) return {t:t1, T:pts[pts.length - 1].T, outside:"high"};
+    for(var i = 0; i < pts.length - 1; i++){
+      var a = pts[i], b = pts[i + 1];
+      if(t >= a.t && t <= b.t){
+        if(b.t === a.t) return {t:a.t, T:a.T, exact:true};
+        var k = (t - a.t) / (b.t - a.t);
+        return {t:t, T:a.T + k * (b.T - a.T), exact:(t === a.t || t === b.t)};
+      }
+    }
+    return {t:t1, T:pts[pts.length - 1].T};
+  }
+  function timeAtT(pts, T){
+    var res = [];
+    if(!pts || pts.length === 0) return {list:res};
+    if(pts.length === 1){
+      if(Math.abs(pts[0].T - T) < 1e-9) res.push({t:pts[0].t, T:pts[0].T, exact:true});
+      return {list:res, Tmin:pts[0].T, Tmax:pts[0].T};
+    }
+    var Ts = pts.map(function(p){ return p.T; });
+    var Tmin = Math.min.apply(null, Ts), Tmax = Math.max.apply(null, Ts);
+    pts.forEach(function(p){
+      if(Math.abs(p.T - T) < 1e-9) res.push({t:p.t, T:p.T, exact:true});
+    });
+    for(var i = 0; i < pts.length - 1; i++){
+      var a = pts[i], b = pts[i + 1];
+      if(a.T === b.T) continue;
+      var lo = Math.min(a.T, b.T), hi = Math.max(a.T, b.T);
+      if(T > lo && T < hi){
+        var k = (T - a.T) / (b.T - a.T);
+        res.push({t:a.t + k * (b.t - a.t), T:T});
+      }
+    }
+    res.sort(sortByT);
+    var uniq = [];
+    res.forEach(function(r){
+      if(!uniq.length || Math.abs(r.t - uniq[uniq.length - 1].t) > 1e-9) uniq.push(r);
+    });
+    return {list:uniq, Tmin:Tmin, Tmax:Tmax};
+  }
+  function visible(){ return series.filter(function(s){ return s.visible; }); }
+  function mainSeries(){
+    for(var i = 0; i < series.length; i++){
+      if(/^外表面/.test(series[i].name)) return series[i];
+    }
+    return series[0] || null;
+  }
+
+  /* ---------------- 手动数据 ---------------- */
+  function parseData(text){
+    var lines = String(text).split(/\r?\n/);
+    var out = [], bad = 0;
+    lines.forEach(function(ln){
+      var line = ln.trim();
+      if(!line || line.charAt(0) === "#") return;
+      var nums = line.replace(/，/g, ",").match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g);
+      if(!nums || nums.length < 2){ bad++; return; }
+      var t = parseFloat(nums[0]), T = parseFloat(nums[1]);
+      if(!Number.isFinite(t) || !Number.isFinite(T)){ bad++; return; }
+      out.push({ t:t, T:T });
+    });
+    return {pts:out, bad:bad};
+  }
+  function buildManual(){
+    var parsed = parseData($("#dataBox").value);
+    badLines = parsed.bad;
+    var pts = parsed.pts.slice().sort(sortByT);
+    var ta = num("#gTa");
+    envT = (pts.length && Number.isFinite(ta)) ? ta : NaN;
+    series = pts.length ? [{name:"实测数据", color:PALETTE[0], pts:pts, visible:true}] : [];
+    lastInfo = pts.length ? ("手动数据 " + pts.length + " 个点") : "";
+  }
+
+function solveTransient(cfg){
+    var layers = cfg.layers;
+    if(!layers || !layers.length) return null;
+
+    /* ---- 几何：平面壁（x 从 0 起）或圆筒壁（r 从 r₁ 起） ---- */
+    var plane = cfg.geo !== "cyl";
+    var r1 = plane ? 0 : Math.max(1e-4, cfg.r1 || 0);
+
+    var xIf = [0];                                   // 相对内表面的厚度坐标 (m)
+    layers.forEach(function(L){ xIf.push(xIf[xIf.length - 1] + L.d / 1000); });
+    var Ltot = xIf[xIf.length - 1];
+    if(!(Ltot > 0)) return null;
+    var xEnd = (plane ? 0 : r1) + Ltot;              // 外表面坐标（平面为总厚，圆筒为外半径）
+
+    /* ---- 网格：目标 Δx ≈ 2.5 mm，且每层至少 2 个节点 ---- */
+    var minThk = Infinity;
+    layers.forEach(function(L){ if(L.d > 0 && L.d < minThk) minThk = L.d; });
+    var nByTotal = Math.round(Ltot / 0.0025) + 1;
+    var nByThin = (isFinite(minThk) && minThk > 0) ? Math.ceil(Ltot / (minThk / 1000 / 2)) + 1 : 0;
+    var nWant = Math.max(nByTotal, nByThin, 31);
+    var gridCapped = nWant > 1201;
+    var N = Math.max(31, Math.min(1201, nWant));
+    var dx = Ltot / (N - 1);
+
+    var li = new Int32Array(N), rc = new Float64Array(N), xs = new Float64Array(N);
+    var C = new Float64Array(N), Gf = new Float64Array(N - 1);   // 节点热容 / 界面热导（均略去 2π）
+    var faceSegs = [];
+    function layerAt(x){
+      var rel = x - (plane ? 0 : r1);
+      for(var k = 0; k < layers.length; k++){ if(rel < xIf[k + 1] - 1e-12) return k; }
+      return layers.length - 1;
+    }
+    for(var j0 = 0; j0 < N; j0++){
+      xs[j0] = (plane ? 0 : r1) + j0 * dx;
+      li[j0] = layerAt(xs[j0]);
+    }
+    // 节点 ρc：控制体内按材质加权
+    for(var jj = 0; jj < N; jj++){
+      var ca = Math.max(plane ? 0 : r1, xs[jj] - dx / 2), cb = Math.min(xEnd, xs[jj] + dx / 2);
+      var cw = cb - ca, cx = ca, csum = 0, cg = 0;
+      while(cx < cb - 1e-12 && cg++ < 64){
+        var ck = layerAt(cx + 1e-12);
+        var cEnd = Math.min(cb, (plane ? 0 : r1) + xIf[ck + 1]);
+        csum += layers[ck].rho * layers[ck].c * (cEnd - cx);
+        cx = cEnd;
+      }
+      rc[jj] = cw > 0 ? csum / cw : layers[li[jj]].rho * layers[li[jj]].c;
+      // 体积因子：平面为 dx；圆筒为 r·dx（半控制体取一半）
+      var vol = (jj === 0 || jj === N - 1) ? dx / 2 : dx;
+      C[jj] = rc[jj] * (plane ? vol : xs[jj] * vol);
+    }
+    // 界面按材质切分（圆筒面积因子 A = r）
+    for(var jf = 0; jf < N - 1; jf++){
+      var fa = xs[jf], fb = xs[jf + 1], fw = fb - fa, segs = [], fx = fa, fg = 0;
+      while(fx < fb - 1e-12 && fg++ < 64){
+        var fk = layerAt(fx + 1e-12);
+        var fEnd = Math.min(fb, (plane ? 0 : r1) + xIf[fk + 1]);
+        segs.push({k:fk, x:fx, frac:(fEnd - fx) / fw});
+        fx = fEnd;
+      }
+      if(!segs.length) segs.push({k:layerAt(fa), x:fa, frac:1});
+      faceSegs.push(segs);
+    }
+    function lamAt(k, temp){ return Math.max(0.005, layers[k].l0 + layers[k].b * temp); }
+    function areaAt(x){ return plane ? 1 : x; }
+    function faceLam(a, b, Ta, Tb){
+      var segs = faceSegs[a], inv = 0, xa = xs[a], span = xs[b] - xs[a];
+      for(var s = 0; s < segs.length; s++){
+        var fr = (span > 0) ? (segs[s].x - xa + (segs[s].frac * span) / 2) / span : 0;
+        inv += segs[s].frac / lamAt(segs[s].k, Ta + (Tb - Ta) * fr);
+      }
+      var lamF = 1 / inv;
+      return lamF * areaAt(0.5 * (xs[a] + xs[b])) / dx;      // = λ·A/Δx
+    }
+    function updateG(Tarr){
+      for(var f = 0; f < N - 1; f++) Gf[f] = faceLam(f, f + 1, Tarr[f], Tarr[f + 1]);
+    }
+    // 外表面换热系数（可随表面温度变化）
+    function hOutAt(Ts){
+      if(!cfg.hOutAuto) return cfg.hOut;
+      var dT = Ts - cfg.Tair;
+      var hc = dT > 0 ? 1.42 * Math.pow(dT / Math.max(cfg.hChar || 2, 0.05), 0.25) : 0;
+      var TsK = Ts + 273.15, TaK = cfg.Tair + 273.15;
+      var hr = Math.abs(TsK - TaK) > 1e-9
+        ? (cfg.eps || 0.8) * 5.67e-8 * (Math.pow(TsK, 4) - Math.pow(TaK, 4)) / (TsK - TaK) : 0;
+      return Math.max(0.5, hc + hr);
+    }
+
+    /* ---- 初始温度场：在本网格上求一维稳态解（与瞬态离散完全自洽） ---- */
+    var T = new Float64Array(N);
+    var qInit = 0, initInner = cfg.surf0[0], initOuter = cfg.surf0[cfg.surf0.length - 1];
+    var A0 = areaAt(xs[0]), AN = areaAt(xs[N - 1]);
+    (function initSteady(){
+      var Tt = new Float64Array(N), Gtmp = new Float64Array(N - 1);
+      function profileFrom(Q){
+        Tt[0] = cfg.surf0[0];
+        for(var f = 0; f < N - 1; f++) Gtmp[f] = faceLam(f, f + 1, Tt[Math.max(f - 1, 0)], Tt[f]);
+        // 沿程积分：T_{j} = T_{j-1} - Q / G_{j-1}
+        for(var j = 1; j < N; j++){
+          var tp = Tt[j - 1];
+          var g1 = faceLam(j - 1, j, tp, tp);
+          var tGuess = tp - Q / g1;
+          var g2 = faceLam(j - 1, j, tp, tGuess);
+          Tt[j] = tp - Q / g2;
+        }
+        return Tt;
+      }
+      function resid(Q){
+        var p = profileFrom(Q);
+        var Ts = p[N - 1];
+        return Ts - (cfg.Tair + Q / (hOutAt(Ts) * AN));      // 外表面残差（随 Q 单调递减）
+      }
+      var f0 = resid(0), Q = 0;
+      if(Math.abs(f0) > 1e-10){
+        var sgn = f0 > 0 ? 1 : -1, lo = 0, hi = sgn * 1e-3, g = 0;
+        while(resid(hi) * f0 > 0 && g++ < 80) hi *= 2;
+        for(var it = 0; it < 90; it++){
+          var mid = 0.5 * (lo + hi);
+          if(resid(mid) * f0 > 0) lo = mid; else hi = mid;
+        }
+        Q = 0.5 * (lo + hi);
+      }
+      var prof = profileFrom(Q);
+      for(var j2 = 0; j2 < N; j2++) T[j2] = prof[j2];
+      qInit = Q; initInner = prof[0]; initOuter = prof[N - 1];
+    })();
+
+    /* ---- Crank–Nicolson 步进 ---- */
+    var a = new Float64Array(N), b = new Float64Array(N), c = new Float64Array(N),
+        d = new Float64Array(N), cp = new Float64Array(N), dp = new Float64Array(N),
+        Tn = new Float64Array(N), Told = new Float64Array(N);
+
+    function stepCN(dt){
+      for(var i = 0; i < N; i++) Told[i] = T[i];
+      updateG(Told);
+      var Gin = (cfg.innerMode === "conv") ? cfg.hIn * A0 : 0;
+      var Gout = hOutAt(Told[N - 1]) * AN;
+      // 节点 0：半控制体（绝热 / 恒温 / 与内侧气体换热）
+      if(cfg.innerMode === "fixed"){
+        b[0] = 1; c[0] = 0; d[0] = cfg.TinnerFixed;
+      } else {
+        var k0 = Gf[0] / C[0], kin = Gin / C[0];
+        b[0] = 1 + 0.5 * dt * (k0 + kin);
+        c[0] = -0.5 * dt * k0;
+        d[0] = Told[0] + 0.5 * dt * (k0 * (Told[1] - Told[0]) + kin * (2 * cfg.TinnerAmb - Told[0]));
+      }
+      // 内部节点
+      for(var i2 = 1; i2 < N - 1; i2++){
+        var kL = Gf[i2 - 1] / C[i2], kR = Gf[i2] / C[i2];
+        a[i2] = -0.5 * dt * kL;
+        b[i2] = 1 + 0.5 * dt * (kL + kR);
+        c[i2] = -0.5 * dt * kR;
+        d[i2] = Told[i2] + 0.5 * dt * (kL * (Told[i2 - 1] - Told[i2]) - kR * (Told[i2] - Told[i2 + 1]));
+      }
+      // 节点 N-1：半控制体（外表面散热）
+      var kE = Gf[N - 2] / C[N - 1], ko = Gout / C[N - 1];
+      a[N - 1] = -0.5 * dt * kE;
+      b[N - 1] = 1 + 0.5 * dt * (kE + ko);
+      c[N - 1] = 0;
+      d[N - 1] = Told[N - 1] + 0.5 * dt * (kE * (Told[N - 2] - Told[N - 1]) + ko * (2 * cfg.Tair - Told[N - 1]));
+      // Thomas 追赶法
+      cp[0] = c[0] / b[0]; dp[0] = d[0] / b[0];
+      for(var m = 1; m < N; m++){
+        var den = b[m] - a[m] * cp[m - 1];
+        cp[m] = c[m] / den;
+        dp[m] = (d[m] - a[m] * dp[m - 1]) / den;
+      }
+      Tn[N - 1] = dp[N - 1];
+      for(var p = N - 2; p >= 0; p--) Tn[p] = dp[p] - cp[p] * Tn[p + 1];
+      for(var q2 = 0; q2 < N; q2++) T[q2] = Tn[q2];
+    }
+
+    function sample(){
+      var out = [];
+      for(var k = 0; k < xIf.length; k++){
+        var pos = xIf[k] + (plane ? 0 : r1);
+        var jj = Math.min(N - 2, Math.max(0, Math.floor((pos - xs[0]) / dx)));
+        var f = (pos - xs[jj]) / dx;
+        out.push(T[jj] + f * (T[jj + 1] - T[jj]));
+      }
+      return out;
+    }
+
+    /* ---- 时间推进：几何递增步长 + 命中输出时刻 ---- */
+    var tEnd = cfg.tEnd, nOut = cfg.nOut, dtOut = tEnd / (nOut - 1);
+    updateG(T);
+    var tauMin = Infinity;
+    for(var j3 = 0; j3 < N; j3++){
+      var gsum = (j3 > 0 ? Gf[j3 - 1] : 0) + (j3 < N - 1 ? Gf[j3] : 0);
+      if(!(gsum > 0)) gsum = 1e-12;
+      var v = C[j3] / gsum;
+      if(v < tauMin) tauMin = v;
+    }
+    var dt0 = Math.max(0.5 * tauMin, tEnd / 1e7);
+    var dtMax = Math.max(dt0, tEnd / 50);
+    var grow = 1.06;
+
+    var times = [0], samples = [sample()];
+    var t = 0, nextOut = 1, dt = dt0, steps = 0, capped = false, dtLast = dt;
+    while(nextOut < nOut && t < tEnd - 1e-12){
+      var tTarget = nextOut * dtOut;
+      var dtUse = Math.min(dt, dtMax, tTarget - t, tEnd - t);
+      if(!(dtUse > 0)){ dtUse = Math.min(tTarget - t, tEnd - t); }
+      if(!(dtUse > 0)) break;
+      stepCN(dtUse);
+      t += dtUse;
+      steps++;
+      if(dtUse >= dt - 1e-12) dt = Math.min(dt * grow, dtMax);
+      if(t >= tTarget - 1e-9){
+        times.push(tTarget);
+        samples.push(sample());
+        nextOut++;
+      }
+      if(steps >= 40000){ capped = true; break; }
+      dtLast = dtUse;
+    }
+    while(times.length < nOut){
+      times.push(+(times.length * dtOut).toFixed(9));
+      samples.push(samples[samples.length - 1].slice());
+    }
+
+    var mm = function(x){ return Math.round(x * 1000); };
+    var outSeries = [];
+    for(var k2 = 0; k2 < xIf.length; k2++){
+      var pos2 = xIf[k2] + (plane ? 0 : r1);
+      var nm;
+      if(k2 === 0) nm = plane ? "内表面 (0 mm)" : "内表面 (r=" + mm(pos2) + " mm)";
+      else if(k2 === xIf.length - 1) nm = plane ? "外表面 (" + mm(Ltot) + " mm)" : "外表面 (r=" + mm(pos2) + " mm)";
+      else nm = plane ? ("界面" + k2 + " (" + mm(pos2) + " mm)") : ("界面" + k2 + " (r=" + mm(pos2) + " mm)");
+      var pts = [];
+      for(var q3 = 0; q3 < times.length; q3++){ pts.push({t:times[q3], T:samples[q3][k2]}); }
+      outSeries.push({name:nm, pts:pts});
+    }
+
+    return {
+      series: outSeries,
+      info: {
+        N:N, dx:dx, steps:steps, tEnd:tEnd, capped:capped, dt0:dt0, dtLast:dtLast,
+        gridCapped:gridCapped, qInit:qInit, initInner:initInner, initOuter:initOuter,
+        geo: plane ? "plane" : "cyl"
+      }
+    };
+  }
+
+  /* ---------------- 同步模式 ---------------- */
+  function innerLabel(v){
+    return v === "adiabatic" ? "绝热" : (v === "fixed" ? "内侧恒温" : "与内侧气体换热");
+  }
+  function setSyncInfo(kind, text){
+    var el = $("#syncInfo");
+    el.className = "msg " + (kind === "ok" ? "info" : (kind === "err" ? "err" : "warn"));
+    el.innerHTML = text;
+  }
+  function buildSync(){
+    var S = window.SteadySolver;
+    var r = S ? S.result() : null;
+    if(!r || !r.ok){
+      series = []; lastInfo = "";
+      setSyncInfo("err", "选项卡 ① 的参数还不完整，请先修正后再看曲线。" +
+        (r && r.errors && r.errors.length ? "（" + esc(r.errors[0]) + "）" : ""));
+      return;
+    }
+    var fac = unitFactor(), u = unitText();
+    var tEndIn = num("#tcEnd");
+    var nOut = Math.round(num("#tcPoints"));
+    if(!Number.isFinite(tEndIn) || tEndIn <= 0){
+      series = []; lastInfo = "";
+      setSyncInfo("err", "请填写有效的「停炉后计算时长」。");
+      return;
+    }
+    if(!Number.isFinite(nOut) || nOut < 11) nOut = 121;
+    nOut = Math.max(11, Math.min(601, nOut));
+
+    var iMode = $("#innerMode").value;
+    var hIn = num("#tcHin"), tInAmb = num("#tcTin");
+    if(iMode === "conv" && (!Number.isFinite(hIn) || hIn <= 0)){
+      series = []; lastInfo = "";
+      setSyncInfo("err", "「与内侧气体换热」模式下，内侧换热系数 h₁ 必须大于 0。");
+      return;
+    }
+    if(iMode === "conv" && !Number.isFinite(tInAmb)) tInAmb = r.tAir;
+
+    var res = solveTransient({
+      layers: r.layers.map(function(L){ return {name:L.name, d:L.d, l0:L.l0, b:L.b, rho:L.rho, c:L.c}; }),
+      surf0: r.surf,
+      geo: r.geo, r1: r.r1,
+      Tair: r.tAir,
+      hOut: r.hOut, hOutAuto: r.hOutAuto, eps: num("#epsOut"), hChar: num("#hChar"),
+      hIn: hIn,
+      TinnerAmb: tInAmb,
+      innerMode: iMode,
+      TinnerFixed: r.surf[0],
+      tEnd: tEndIn * fac,
+      nOut: nOut
+    });
+    if(!res){
+      series = []; lastInfo = "";
+      setSyncInfo("err", "瞬态计算失败：请检查各层厚度与 λ、ρ、c 是否为正数。");
+      return;
+    }
+
+    series = res.series.map(function(s, i){
+      return {
+        name: s.name,
+        color: PALETTE[i % PALETTE.length],
+        visible: true,
+        pts: s.pts.map(function(p){ return {t: p.t / fac, T: p.T}; })
+      };
+    });
+    envT = r.tAir;
+    badLines = 0;
+    lastInfo = "初始温度场：内表面 " + fmt(res.info.initInner, 1) + " °C → 外表面 " + fmt(res.info.initOuter, 1) +
+               " °C，q = " + fmt(res.info.qInit, 1) + " W/m²（在本题网格上求解稳态得到，与选项卡 ① 的结果一致）";
+    setSyncInfo((res.info.capped || res.info.gridCapped) ? "warn" : "ok",
+      "已按选项卡 ① 同步（" + (r.geo === "cyl" ? "圆筒壁" : "平面壁") + "，内侧边界：" + innerLabel(iMode) + "，h₂ " + (r.hOutAuto ? "自动 " + fmt(r.hOut, 1) : "手动 " + fmt(r.hOut, 1)) + "）：" + series.length + " 条曲线 · " +
+      "网格 " + res.info.N + " 节点（Δx≈" + fmt(res.info.dx * 1000, 1) + " mm）· " +
+      res.info.steps + " 个时间步（Crank-Nicolson 隐式，起始 Δt≈" + fmt(res.info.dt0, 1) + " s）" +
+      (res.info.capped ? " · 达到步数上限，曲线可能未算到设定时长" : "") +
+      (res.info.gridCapped ? " · 层厚差异过大，网格已达上限，最薄层可能欠分辨" : "") +
+      "。" + lastInfo);
+  }
+
+  /* ---------------- 主流程 ---------------- */
+  function currentMode(){
+    var el = document.querySelector("input[name=srcMode]:checked");
+    return el ? el.value : "sync";
+  }
+  function refresh(){
+    if(currentMode() === "sync") buildSync();
+    else buildManual();
+    runQueries();
+  }
+
+  /* ---------------- 绘图（多曲线） ---------------- */
+  function buildView(){
+    var pts = [];
+    visible().forEach(function(s){ pts = pts.concat(s.pts); });
+    if(!pts.length) pts = [{t:0, T:0}];
+    var tmin = Infinity, tmax = -Infinity, Tmin = Infinity, Tmax = -Infinity;
+    pts.forEach(function(p){
+      if(p.t < tmin) tmin = p.t;
+      if(p.t > tmax) tmax = p.t;
+      if(p.T < Tmin) Tmin = p.T;
+      if(p.T > Tmax) Tmax = p.T;
+    });
+    var rawTmin = tmin, rawTmax = tmax;
+    if(tmax - tmin < 1e-9){ var d = Math.abs(tmax) * 0.1 || 1; tmin -= d; tmax += d; }
+    else { var pt = (tmax - tmin) * 0.03; tmin -= pt; tmax += pt; }
+    if(Tmax - Tmin < 1e-9){ var e = Math.abs(Tmax) * 0.1 || 1; Tmin -= e; Tmax += e; }
+    else { var pT = (Tmax - Tmin) * 0.12; Tmin -= pT; Tmax += pT; }
+    // 时间轴以数据起点为起点：数据都非负时不允许出现负时间
+    if(rawTmin >= 0 && tmin < 0) tmin = 0;
+    if(rawTmax <= 0 && tmax > 0) tmax = 0;
+    if(Number.isFinite(envT) && envT > Tmin && envT < Tmax){ /* 已在范围内 */ }
+    return {tmin:tmin, tmax:tmax, Tmin:Tmin, Tmax:Tmax};
+  }
+  function X(t){ return mL + (t - view.tmin) / (view.tmax - view.tmin) * pw; }
+  function Y(T){ return mT + (1 - (T - view.Tmin) / (view.Tmax - view.Tmin)) * ph; }
+  function invX(x){ return view.tmin + (x - mL) / pw * (view.tmax - view.tmin); }
+
+  function draw(){
+    var vis = visible();
+    if(!vis.length){
+      wrap.innerHTML = '<div id="tip"></div><div class="hint" style="padding:60px 10px;text-align:center">' +
+        (currentMode() === "sync" ? "选项卡 ① 参数有效后这里会自动出现各界面降温曲线" : "请在上方输入数据，或点击「载入示例数据」") +
+        '</div>';
+      tip = $("#tip");
+      renderLegend();
+      return;
+    }
+    view = buildView();
+    var u = unitText();
+    var multi = vis.length > 1;
+    var s = [];
+    s.push('<svg id="kChart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="' + SVGNS + '">');
+    s.push('<defs><linearGradient id="gAreaK" x1="0" y1="0" x2="0" y2="1">' +
+           '<stop offset="0%" stop-color="#1d5fd0" stop-opacity="0.20"/>' +
+           '<stop offset="100%" stop-color="#1d5fd0" stop-opacity="0.01"/></linearGradient></defs>');
+    s.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
+
+    ticks(view.Tmin, view.Tmax, 6).forEach(function(T){
+      var y = Y(T);
+      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#edf2f9"/>');
+      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#8697ab">' +
+             (Math.abs(T) >= 100 ? T.toFixed(0) : T.toFixed(1)) + '</text>');
+    });
+    ticks(view.tmin, view.tmax, 7).forEach(function(t){
+      var x = X(t);
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + mT + '" x2="' + x.toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#f2f6fc"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (mT + ph + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
+             (Math.abs(t) >= 100 ? t.toFixed(0) : t.toFixed(1)) + '</text>');
+    });
+    s.push('<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (mL + pw) + '" y2="' + (mT + ph) + '" stroke="#c9d8ea"/>');
+    s.push('<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + ph) + '" stroke="#c9d8ea"/>');
+    s.push('<text x="' + (mL + pw / 2) + '" y="' + (H - 13) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">时间 (' + esc(u) + ')</text>');
+    s.push('<text x="17" y="' + (mT + ph / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' + (mT + ph / 2) + ')">温度 (°C)</text>');
+
+    // 面积（仅单曲线时）
+    if(!multi){
+      var sp = vis[0].pts;
+      if(sp.length > 1){
+        var dA = sp.map(function(p, i){ return (i ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.T).toFixed(1); }).join(" ");
+        s.push('<path d="' + dA + ' L' + X(sp[sp.length - 1].t).toFixed(1) + ' ' + (mT + ph) +
+               ' L' + X(sp[0].t).toFixed(1) + ' ' + (mT + ph) + ' Z" fill="url(#gAreaK)" stroke="none"/>');
+      }
+    }
+
+    // 各条曲线
+    vis.forEach(function(sr){
+      var pts = sr.pts;
+      var d = pts.map(function(p, i){ return (i ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.T).toFixed(1); }).join(" ");
+      s.push('<path d="' + d + '" fill="none" stroke="' + sr.color + '" stroke-width="' + (multi ? 2.2 : 2.6) +
+             '" stroke-linejoin="round" stroke-linecap="round"/>');
+      if(pts.length <= 40){
+        pts.forEach(function(p){
+          s.push('<circle cx="' + X(p.t).toFixed(1) + '" cy="' + Y(p.T).toFixed(1) + '" r="3" fill="#fff" stroke="' + sr.color + '" stroke-width="1.8"/>');
+        });
+      }
+    });
+
+    // 首末点标注（仅单曲线或主曲线）
+    var main = mainSeries() && vis.indexOf(mainSeries()) >= 0 ? mainSeries() : vis[0];
+    if(main && main.pts.length){
+      var f = main.pts[0], l = main.pts[main.pts.length - 1];
+      s.push('<text x="' + X(f.t).toFixed(1) + '" y="' + (Y(f.T) - 11).toFixed(1) + '" text-anchor="start" font-size="12" font-weight="600" fill="#17498f">' + fmt(f.T, 0) + ' °C</text>');
+      s.push('<text x="' + X(l.t).toFixed(1) + '" y="' + (Y(l.T) - 11).toFixed(1) + '" text-anchor="end" font-size="12" font-weight="600" fill="#17498f">' + fmt(l.T, 0) + ' °C</text>');
+    }
+
+    // 温度查询标记
+    qTemps.forEach(function(mark){
+      var sr = mark.series;
+      if(vis.indexOf(sr) < 0) return;
+      var x = X(mark.t), y = Y(mark.T);
+      s.push('<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.6" fill="#e2542a" stroke="#fff" stroke-width="2"/>');
+    });
+    if(qTemps.length){
+      var m0 = qTemps[0];
+      if(vis.indexOf(m0.series) >= 0){
+        s.push('<line x1="' + mL + '" y1="' + Y(m0.T).toFixed(1) + '" x2="' + X(m0.t).toFixed(1) + '" y2="' + Y(m0.T).toFixed(1) + '" stroke="#e2542a" stroke-dasharray="4 4" stroke-width="1.2" opacity=".7"/>');
+        s.push('<line x1="' + X(m0.t).toFixed(1) + '" y1="' + Y(m0.T).toFixed(1) + '" x2="' + X(m0.t).toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#e2542a" stroke-dasharray="4 4" stroke-width="1.2" opacity=".7"/>');
+      }
+    }
+    // 时间查询标记
+    if(qTime && qTime.marks && qTime.marks.length){
+      var qt = qTime.t;
+      s.push('<line x1="' + X(qt).toFixed(1) + '" y1="' + mT + '" x2="' + X(qt).toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#12805c" stroke-dasharray="5 4" stroke-width="1.4" opacity=".85"/>');
+      qTime.marks.forEach(function(mk){
+        if(vis.indexOf(mk.series) < 0) return;
+        s.push('<circle cx="' + X(qt).toFixed(1) + '" cy="' + Y(mk.T).toFixed(1) + '" r="5.2" fill="#12805c" stroke="#fff" stroke-width="2"/>');
+      });
+    }
+
+    // 环境温度参考线
+    if(Number.isFinite(envT) && envT > view.Tmin && envT < view.Tmax){
+      var ya = Y(envT);
+      s.push('<line x1="' + mL + '" y1="' + ya.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + ya.toFixed(1) + '" stroke="#9dc3ee" stroke-dasharray="6 5"/>');
+      var nearEnd = main && main.pts.length ? Math.abs(ya - Y(main.pts[main.pts.length - 1].T)) < 30 : false;
+      if(nearEnd){
+        s.push('<text x="' + (mL + 6) + '" y="' + (ya - 7).toFixed(1) + '" font-size="11" fill="#4b86c9">环境 ' + fmt(envT, 0) + ' °C</text>');
+      } else {
+        s.push('<text x="' + (mL + pw - 4) + '" y="' + (ya - 6).toFixed(1) + '" text-anchor="end" font-size="11" fill="#4b86c9">环境 ' + fmt(envT, 0) + ' °C</text>');
+      }
+    }
+
+    // 悬停图层
+    s.push('<g id="hovG" style="display:none">' +
+      '<line id="hovV" x1="0" y1="' + mT + '" x2="0" y2="' + (mT + ph) + '" stroke="#5b7089" stroke-dasharray="3 3"/>' +
+      '<g id="hovDots"></g></g>');
+    s.push('<rect id="hit" x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '" fill="transparent" style="cursor:crosshair"/>');
+    s.push('</svg>');
+
+    wrap.innerHTML = '<div id="tip"></div>' + s.join("");
+    tip = $("#tip");
+    renderLegend();
+    bindChart();
+  }
+
+  function renderLegend(){
+    var vis = visible();
+    var el = $("#kLegend");
+    if(!series.length){
+      el.innerHTML = '<span style="color:#8697ab">暂无曲线</span>';
+      return;
+    }
+    el.innerHTML = series.map(function(s, i){
+      return '<span class="lg' + (s.visible ? "" : " off") + '" data-i="' + i + '">' +
+             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>';
+    }).join("") + (Number.isFinite(envT) ? '<span><i style="background:#9dc3ee;height:0;border-top:3px dashed #9dc3ee"></i>环境 ' + fmt(envT, 0) + ' °C</span>' : '');
+    Array.prototype.forEach.call(el.querySelectorAll(".lg"), function(node){
+      node.addEventListener("click", function(){
+        var i = +node.getAttribute("data-i");
+        series[i].visible = !series[i].visible;
+        runQueries();
+      });
+    });
+  }
+
+  /* ---------------- 悬停交互 ---------------- */
+  function bindChart(){
+    var svg = $("#kChart");
+    if(!svg) return;
+    function toLocal(evt){
+      var p = svg.createSVGPoint();
+      p.x = evt.clientX; p.y = evt.clientY;
+      var m = svg.getScreenCTM();
+      if(!m) return null;
+      return p.matrixTransform(m.inverse());
+    }
+    function move(evt){
+      var loc = toLocal(evt);
+      if(!loc) return;
+      var x = Math.max(mL, Math.min(mL + pw, loc.x));
+      var t = invX(x);
+      var vis = visible();
+      if(!vis.length) return;
+      var marks = [], anyOutside = false;
+      vis.forEach(function(sr){
+        var r = T_at(sr.pts, t);
+        if(!r) return;
+        if(r.outside) anyOutside = true;
+        marks.push({series:sr, T:r.T, exact:r.exact, outside:r.outside});
+      });
+      if(!marks.length) return;
+      hov = {t:t, marks:marks};
+
+      var g = $("#hovG"), v = $("#hovV"), dots = $("#hovDots");
+      g.style.display = "";
+      v.setAttribute("x1", x.toFixed(1)); v.setAttribute("x2", x.toFixed(1));
+      dots.innerHTML = marks.map(function(mk){
+        return '<circle cx="' + x.toFixed(1) + '" cy="' + Y(mk.T).toFixed(1) + '" r="4.6" fill="#fff" stroke="' + mk.series.color + '" stroke-width="2.4"/>';
+      }).join("");
+
+      var u = unitText();
+      var html = '<div class="tt">' + (anyOutside ? "超出数据范围 · 最近端点" : "悬停位置") + '</div>' +
+                 '时间 <b>' + fmt(t, 2) + '</b> ' + esc(u);
+      marks.forEach(function(mk){
+        html += '<div style="margin-top:2px"><span class="swatch" style="background:' + mk.series.color + '"></span>' +
+                esc(mk.series.name) + ' <b>' + fmt(mk.T, 1) + '</b> °C</div>';
+      });
+      tip.innerHTML = html;
+      tip.style.opacity = "1";
+      var rect = wrap.getBoundingClientRect();
+      var cx = evt.clientX - rect.left, cy = evt.clientY - rect.top;
+      var tw = tip.offsetWidth, th = tip.offsetHeight;
+      var left = cx + 16;
+      if(left + tw > rect.width - 4) left = cx - tw - 16;
+      left = Math.max(4, left);
+      var top = Math.min(Math.max(4, cy - th - 12), Math.max(4, rect.height - th - 4));
+      tip.style.left = left + "px";
+      tip.style.top = top + "px";
+    }
+    function leave(){
+      var g = $("#hovG");
+      if(g) g.style.display = "none";
+      if(tip) tip.style.opacity = "0";
+    }
+    svg.addEventListener("mousemove", move);
+    svg.addEventListener("mouseleave", leave);
+    svg.addEventListener("touchmove", function(e){
+      if(e.touches.length){ move(e.touches[0]); e.preventDefault(); }
+    }, {passive:false});
+    svg.addEventListener("touchend", leave);
+    svg.addEventListener("click", function(e){
+      var loc = toLocal(e);
+      if(!loc || loc.x < mL || loc.x > mL + pw) return;
+      var t = invX(loc.x);
+      $("#qTime").value = (+t.toFixed(3));
+      runQueries();
+      $("#qTime").focus();
+    });
+  }
+
+  /* ---------------- 查询 ---------------- */
+  function runQueries(){
+    var u = unitText();
+    $("#unitTag1").textContent = u;
+    var vis = visible();
+
+    // 时间 → 各界面温度
+    var rt = $("#resTime"), tv = $("#qTime").value.trim();
+    qTime = null;
+    if(tv === ""){
+      rt.className = "qres";
+      rt.textContent = vis.length ? "请输入时间，或把鼠标移到曲线上查看。" : "暂无可查询的曲线。";
+    } else {
+      var t = parseFloat(tv);
+      if(!Number.isFinite(t)){
+        rt.className = "qres bad"; rt.textContent = "时间格式有误。";
+      } else if(!vis.length){
+        rt.className = "qres bad"; rt.textContent = "暂无可查询的曲线。";
+      } else {
+        var marks = [], outside = false;
+        vis.forEach(function(sr){
+          var r = T_at(sr.pts, t);
+          if(!r) return;
+          if(r.outside) outside = true;
+          marks.push({series:sr, T:r.T, exact:r.exact});
+        });
+        if(!marks.length){ rt.className = "qres bad"; rt.textContent = "暂无数据。"; }
+        else if(outside){
+          rt.className = "qres bad";
+          var sp = vis[0].pts;
+          rt.innerHTML = '时间 <b>' + fmt(t, 2) + '</b> ' + esc(u) + ' 超出数据范围（' +
+            fmt(sp[0].t, 2) + ' ~ ' + fmt(sp[sp.length - 1].t, 2) + ' ' + esc(u) + '），已给出端点值：' +
+            marks.map(function(mk){
+              return '<div class="row2"><span class="nm"><span class="swatch" style="background:' + mk.series.color + '"></span>' +
+                     esc(mk.series.name) + '</span><span class="vv">' + fmt(mk.T, 1) + ' °C</span></div>';
+            }).join("");
+        } else {
+          qTime = {t:t, marks:marks};
+          rt.className = "qres good";
+          rt.innerHTML = '<div style="margin-bottom:4px">时间 <b>' + fmt(t, 2) + '</b> ' + esc(u) + ' 时各界面温度：</div>' +
+            marks.map(function(mk){
+              return '<div class="row2"><span class="nm"><span class="swatch" style="background:' + mk.series.color + '"></span>' +
+                     esc(mk.series.name) + '</span><span class="vv">' + fmt(mk.T, 1) + ' °C</span></div>';
+            }).join("");
+        }
+      }
+    }
+
+    // 温度 → 时间
+    var rT = $("#resTemp"), Tv = $("#qTemp").value.trim();
+    qTemps = [];
+    if(Tv === ""){
+      rT.className = "qres";
+      rT.textContent = vis.length ? "输入温度，查询各界面降到该温度所需的时间。" : "暂无可查询的曲线。";
+    } else {
+      var T = parseFloat(Tv);
+      if(!Number.isFinite(T)){
+        rT.className = "qres bad"; rT.textContent = "温度格式有误。";
+      } else if(!vis.length){
+        rT.className = "qres bad"; rT.textContent = "暂无可查询的曲线。";
+      } else {
+        var rows = [], anyHit = false, minT = Infinity, maxT = -Infinity;
+        vis.forEach(function(sr){
+          var res = timeAtT(sr.pts, T);
+          if(res.Tmin !== undefined){ minT = Math.min(minT, res.Tmin); maxT = Math.max(maxT, res.Tmax); }
+          if(!res.list.length){
+            rows.push('<div class="row2"><span class="nm"><span class="swatch" style="background:' + sr.color + '"></span>' +
+                      esc(sr.name) + '</span><span class="vv" style="font-weight:400;color:#8697ab">不经过该温度</span></div>');
+            return;
+          }
+          anyHit = true;
+          var times = res.list.map(function(x){ return fmt(x.t, 2); }).join(" / ");
+          res.list.forEach(function(x){ qTemps.push({series:sr, t:x.t, T:T}); });
+          rows.push('<div class="row2"><span class="nm"><span class="swatch" style="background:' + sr.color + '"></span>' +
+                    esc(sr.name) + '</span><span class="vv">' + times + ' ' + esc(u) + '</span></div>');
+        });
+        if(!anyHit){
+          rT.className = "qres bad";
+          rT.innerHTML = '温度 <b>' + fmt(T, 1) + '</b> °C 超出各曲线范围' +
+            (Number.isFinite(minT) ? '（' + fmt(minT, 1) + ' ~ ' + fmt(maxT, 1) + ' °C）' : '') + '。';
+        } else {
+          rT.className = "qres good";
+          rT.innerHTML = '<div style="margin-bottom:4px">降到 <b>' + fmt(T, 1) + '</b> °C 所需时间：</div>' + rows.join("");
+        }
+      }
+    }
+
+    renderStats();
+    draw();
+    if(hov){                                  // 重绘后恢复悬停十字线
+      var vis2 = visible();
+      var g = $("#hovG");
+      if(g && vis2.length && hov.t >= vis2[0].pts[0].t && hov.t <= vis2[0].pts[vis2[0].pts.length - 1].t){
+        g.style.display = "";
+        var xx = X(hov.t);
+        $("#hovV").setAttribute("x1", xx.toFixed(1));
+        $("#hovV").setAttribute("x2", xx.toFixed(1));
+        $("#hovDots").innerHTML = hov.marks.map(function(mk){
+          if(vis2.indexOf(mk.series) < 0) return "";
+          return '<circle cx="' + xx.toFixed(1) + '" cy="' + Y(mk.T).toFixed(1) + '" r="4.6" fill="#fff" stroke="' + mk.series.color + '" stroke-width="2.4"/>';
+        }).join("");
+      }
+    }
+  }
+
+  /* ---------------- 统计 ---------------- */
+  function kpi(k, v){ return '<div class="kpi"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
+  function renderStats(){
+    var box = $("#kpis"), msgs = $("#kMsgs");
+    msgs.innerHTML = "";
+    var main = mainSeries();
+    if(!main || !main.pts.length){
+      box.innerHTML = '<div class="kpi"><div class="k">状态</div><div class="v" style="font-size:14px">暂无数据</div></div>';
+      return;
+    }
+    var u = unitText();
+    var pts = main.pts;
+    var t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+    var Ts = pts.map(function(p){ return p.T; });
+    var Tmax = Math.max.apply(null, Ts), Tmin = Math.min.apply(null, Ts);
+    var dur = t1 - t0;
+    var avg = dur > 0 ? (pts[0].T - pts[pts.length - 1].T) / dur : 0;
+    var maxRate = 0, maxAt = null;
+    for(var i = 0; i < pts.length - 1; i++){
+      var dt = pts[i + 1].t - pts[i].t;
+      if(dt <= 0) continue;
+      var rate = (pts[i].T - pts[i + 1].T) / dt;
+      if(rate > maxRate){ maxRate = rate; maxAt = pts[i + 1].t; }
+    }
+    box.innerHTML =
+      kpi("曲线数", series.length + " 条") +
+      kpi("主曲线", esc(main.name)) +
+      kpi("起始温度", fmt(pts[0].T, 1) + " <small>°C</small>") +
+      kpi("结束温度", fmt(pts[pts.length - 1].T, 1) + " <small>°C</small>") +
+      kpi("总时长", fmt(dur, 2) + " <small>" + esc(u) + "</small>") +
+      kpi("温度范围", fmt(Tmin, 1) + " ~ " + fmt(Tmax, 1) + " <small>°C</small>") +
+      kpi("平均降温速率", fmt(Math.abs(avg), 2) + " <small>°C/" + esc(u) + "</small>") +
+      kpi("最大降温速率", fmt(maxRate, 2) + " <small>°C/" + esc(u) + "</small>");
+
+    var tips = [];
+    if(currentMode() === "sync" && lastInfo) tips.push('<div class="msg info">' + lastInfo + '</div>');
+    if(badLines > 0) tips.push('<div class="msg warn">有 ' + badLines + ' 行数据无法识别，已自动跳过（每行需要两个数字：时间 温度）。</div>');
+    if(main.pts.length === 1) tips.push('<div class="msg info">只有 1 个数据点，无法画出曲线趋势。</div>');
+    var up = 0, riseTol = Math.max(0.1, (Tmax - Tmin) * 0.001);
+    for(var j = 0; j < pts.length - 1; j++) if(pts[j + 1].T > pts[j].T + riseTol) up++;
+    if(up > 0) tips.push('<div class="msg info">' + esc(main.name) + ' 有 ' + up + ' 段温度回升（例如内侧热量继续向外传递），按温度查询时可能对应多个时间，结果会全部列出。</div>');
+    if(maxAt !== null && maxRate > 0) tips.push('<div class="msg info">' + esc(main.name) + ' 降温最快的区间出现在 ' + fmt(maxAt, 2) + ' ' + esc(u) + ' 附近（约 ' + fmt(maxRate, 2) + ' °C/' + esc(u) + '）。</div>');
+    msgs.innerHTML = tips.join("");
+  }
+
+  /* ---------------- 事件与启动 ---------------- */
+  var syncTimer = null;
+  function scheduleSync(){
+    if(!ready) return;
+    if(currentMode() !== "sync") return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function(){ if(currentMode() === "sync"){ refresh(); } }, 90);
+  }
+
+  var dataTimer = null;
+  $("#dataBox").addEventListener("input", function(){
+    clearTimeout(dataTimer);
+    dataTimer = setTimeout(function(){ if(currentMode() === "manual") refresh(); }, 220);
+  });
+  ["#timeUnit", "#tcEnd", "#tcPoints", "#innerMode", "#tcHin", "#tcTin"].forEach(function(sel){
+    var el = $(sel);
+    if(!el) return;
+    var ev = (el.tagName === "SELECT") ? "change" : "input";
+    el.addEventListener(ev, function(){
+      if(sel === "#innerMode"){
+        var v = el.value;
+        $("#tcHinWrap").classList.toggle("hidden", v !== "conv");
+        $("#tcTinWrap").classList.toggle("hidden", v !== "conv");
+      }
+      refresh();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("input[name=srcMode]"), function(el){
+    el.addEventListener("change", function(){
+      var sync = currentMode() === "sync";
+      Array.prototype.forEach.call(document.querySelectorAll(".syncOnly"), function(n){
+        n.classList.toggle("hidden", !sync);
+        if(sync && n.id === "tcHinWrap") n.classList.toggle("hidden", $("#innerMode").value !== "conv");
+        if(sync && n.id === "tcTinWrap") n.classList.toggle("hidden", $("#innerMode").value !== "conv");
+      });
+      $("#manualPane").classList.toggle("hidden", sync);
+      $("#syncInfo").classList.toggle("hidden", !sync);
+      refresh();
+    });
+  });
+  ["#qTime", "#qTemp"].forEach(function(sel){ $(sel).addEventListener("input", runQueries); });
+  $("#gTa").addEventListener("input", function(){ if(currentMode() === "manual") refresh(); });
+
+  $("#loadDemo").addEventListener("click", function(){
+    $("#timeUnit").value = "h";
+    $("#dataBox").value =
+      "# 停炉后炉体降温实测（时间 h, 温度 °C）\n" +
+      "0,1000\n1,905\n2,812\n3,722\n4,640\n5,562\n6,493\n" +
+      "8,378\n10,288\n12,214\n16,120\n20,66\n24,36\n";
+    refresh();
+  });
+  $("#clearAll").addEventListener("click", function(){
+    $("#dataBox").value = "";
+    $("#qTime").value = "";
+    $("#qTemp").value = "";
+    hov = null;
+    refresh();
+  });
+  $("#genBtn").addEventListener("click", function(){
+    var T0 = num("#gT0"), Ta = num("#gTa"), tau = num("#gTau"), end = num("#gEnd"), step = num("#gStep");
+    if(![T0, Ta, tau, end, step].every(function(v){ return Number.isFinite(v); }) || tau <= 0 || end <= 0 || step <= 0){
+      alert("请填写有效的 T₀、T∞、τ、总时长和取点间隔（均需为正数）。");
+      return;
+    }
+    var lines = ["# 指数冷却模型生成 T(t) = T∞ + (T₀ − T∞)·e^(−t/τ)",
+                 "# T₀=" + T0 + " °C, T∞=" + Ta + " °C, τ=" + tau];
+    var n = Math.min(400, Math.floor(end / step) + 1);
+    for(var i = 0; i < n; i++){
+      var t = i * step;
+      var T = Ta + (T0 - Ta) * Math.exp(-t / tau);
+      lines.push((+t.toFixed(4)) + "," + T.toFixed(1));
+    }
+    if(n * step < end - 1e-9){
+      lines.push((+end.toFixed(4)) + "," + (Ta + (T0 - Ta) * Math.exp(-end / tau)).toFixed(1));
+    }
+    $("#dataBox").value = lines.join("\n");
+    refresh();
+  });
+
+  // 与选项卡 ① 实时同步
+  if(window.SteadySolver){
+    window.SteadySolver.subscribe(function(){ scheduleSync(); });
+  }
+
+  // 初始状态
+  $("#manualPane").classList.add("hidden");
+  $("#syncInfo").classList.remove("hidden");
+  refresh();
+  ready = true;
+})();
+</script>
+
+<script>
+
+/* ================= 选项卡切换（合并版新增） ================= */
+(function(){
+  "use strict";
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+  var panels = Array.prototype.slice.call(document.querySelectorAll(".panel"));
+  function show(id){
+    panels.forEach(function(p){ p.classList.toggle("hidden", p.id !== id); });
+    tabs.forEach(function(t){ t.classList.toggle("active", t.getAttribute("data-panel") === id); });
+    var box = document.getElementById(id);
+    if(box && box.getBoundingClientRect().top < 0) box.scrollIntoView({block:"start"});
+  }
+  tabs.forEach(function(t){
+    t.addEventListener("click", function(){ show(t.getAttribute("data-panel")); });
+  });
+})();
+</script>
+<script>
+/* ==================== 打印报告（黑白 A4） ==================== */
+(function(){
+  "use strict";
+  var $ = function(s){ return document.querySelector(s); };
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function fmt(x, d){
+    if(!Number.isFinite(x)) return "—";
+    if(d === undefined) d = 1;
+    return (+x).toFixed(d);
+  }
+  function pad2(n){ return (n < 10 ? "0" : "") + n; }
+  function stamp(){
+    var d = new Date();
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+           " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+  function val(sel){ var e = $(sel); return e ? String(e.value) : ""; }
+  function selText(sel){
+    var e = $(sel);
+    return (e && e.options) ? e.options[e.selectedIndex].text : "";
+  }
+
+  /* ---------- 颜色 -> 灰阶 ---------- */
+  function grayOf(col){
+    if(!col || col === "none" || col === "transparent") return col;
+    if(col.indexOf("url(") === 0) return col;
+    var r, g, b;
+    if(col.charAt(0) === "#"){
+      var h = col.slice(1);
+      if(h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+      if(!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return "#000000";
+    } else {
+      var m = col.match(/rgba?\(([^)]+)\)/);
+      if(!m) return "#000000";
+      var p = m[1].split(",").map(parseFloat);
+      r = p[0]; g = p[1]; b = p[2];
+    }
+    var y = 0.299 * r + 0.587 * g + 0.114 * b;
+    if(y >= 246) return "#ffffff";
+    var v = Math.max(48, Math.min(205, Math.round(y)));
+    var hex = v.toString(16);
+    if(hex.length < 2) hex = "0" + hex;
+    return "#" + hex + hex + hex;
+  }
+  function grayChart(svg){
+    var c = svg.cloneNode(true);
+    var hov = c.querySelector("#hovG"); if(hov && hov.parentNode) hov.parentNode.removeChild(hov);
+    Array.prototype.forEach.call(c.querySelectorAll("linearGradient stop"), function(s){
+      s.setAttribute("stop-color", "#efefef");
+      s.setAttribute("stop-opacity", "1");
+    });
+    Array.prototype.forEach.call(c.querySelectorAll("*"), function(el){
+      ["stroke", "fill", "stop-color", "color"].forEach(function(a){
+        var v = el.getAttribute(a);
+        if(!v) return;
+        el.setAttribute(a, grayOf(v));
+      });
+    });
+    // 数据线：固定灰阶 + 不同线型，黑白下也能区分
+    var GRAYS = ["#000000", "#3d3d3d", "#6f6f6f", "#9b9b9b", "#c4c4c4"];
+    var DASH  = ["", "7 3", "2 2", "9 2 2 2", "5 2"];
+    Array.prototype.forEach.call(c.querySelectorAll('path[fill="none"]'), function(p, i){
+      p.setAttribute("stroke", GRAYS[i % GRAYS.length]);
+      p.setAttribute("stroke-width", "1.6");
+      if(DASH[i % DASH.length]) p.setAttribute("stroke-dasharray", DASH[i % DASH.length]);
+    });
+    if(!c.getAttribute("height")) c.setAttribute("height", "470");
+    return c;
+  }
+
+  /* ---------- 小工具：键值表（每行两对） ---------- */
+  function pairTable(items){
+    var rows = [], i;
+    for(i = 0; i < items.length; i += 2){
+      var a = items[i], b = items[i + 1];
+      rows.push('<tr><td class="l">' + esc(a[0]) + '</td><td class="l">' + esc(a[1]) + '</td>' +
+        (b ? ('<td class="l">' + esc(b[0]) + '</td><td class="l">' + esc(b[1]) + '</td>')
+           : '<td colspan="2"></td>') + '</tr>');
+    }
+    return '<table class="rpt-kv"><tr><th>项目</th><th>取值</th><th>项目</th><th>取值</th></tr>' +
+           rows.join("") + '</table>';
+  }
+
+  /* ---------- 生成报告 ---------- */
+  function buildReport(){
+    var host = $("#printReport");
+    if(!host) return false;
+    var S = window.SteadySolver;
+    var r = S ? S.result() : null;
+    if(!r || !r.ok){ host.innerHTML = ""; return false; }
+
+    var cyl = r.geo === "cyl";
+    var qLabel = cyl ? "线热流 q_L" : "热流密度 q";
+    var qUnit  = cyl ? "W/m" : "W/m²";
+    var rLabel = cyl ? "总热阻 R_L" : "总热阻 R";
+    var rUnit  = cyl ? "m·K/W" : "m²·K/W";
+    var t = stamp();
+    var H = [];
+
+    H.push('<h1>耐火材料炉衬温度计算报告</h1>');
+    H.push('<div class="meta"><span>计算时间：' + esc(t) + '</span></div>');
+
+    /* 一、计算条件 */
+    var cond = [];
+    cond.push(["几何形式", cyl ? ("圆筒壁（内径 " + fmt(r.dIn, 0) + " mm，外径 " + fmt(r.rOut * 2000, 0) + " mm）") : "平面壁（按单位面积计）"]);
+    cond.push(["内侧边界条件", r.mode === "gas" ? ("已知内侧气体温度 " + fmt(r.tIn, 1) + " °C，h₁ = " + fmt(r.hIn, 1) + " W/(m²·K)") : ("已知内侧表面温度 " + fmt(r.tIn, 1) + " °C")]);
+    cond.push(["外侧环境温度", fmt(r.tAir, 1) + " °C"]);
+    cond.push(["外表面换热系数 h₂", r.hOutAuto ? (fmt(r.hOut, 2) + " W/(m²·K)（自动计算：自然对流 " + fmt(r.h2Conv, 2) + " + 辐射 " + fmt(r.h2Rad, 2) + "）") : (fmt(r.hOut, 1) + " W/(m²·K)（手动给定）")]);
+    cond.push(["炉衬层数 / 总厚度", r.layers.length + " 层 / " + fmt(r.totalThk, 0) + " mm"]);
+    cond.push(["导热系数取值", "λ = λ₀ + b·t（t 为层两端平均温度），迭代求解"]);
+    H.push('<h2>一、计算条件</h2>');
+    H.push(pairTable(cond));
+
+    /* 二、材料参数 */
+    H.push('<h2>二、炉衬材料与热物性参数</h2>');
+    H.push('<table class="rpt-tb"><tr><th>序号</th><th>名称</th><th>厚度 δ<br>(mm)</th><th>λ₀<br>W/(m·K)</th>' +
+           '<th>温度系数 b<br>W/(m·K²)</th><th>密度 ρ<br>(kg/m³)</th><th>比热 c<br>J/(kg·K)</th></tr>');
+    r.layers.forEach(function(L, i){
+      H.push('<tr><td>' + (i + 1) + '</td><td class="l">' + esc(L.name) + '</td><td>' + fmt(L.d, 0) +
+             '</td><td>' + fmt(L.l0, 3) + '</td><td>' + fmt(L.b, 5) + '</td><td>' + fmt(L.rho, 0) +
+             '</td><td>' + fmt(L.c, 0) + '</td></tr>');
+    });
+    H.push('<tr><th colspan="2">合计</th><th>' + fmt(r.totalThk, 0) + '</th><th colspan="4"></th></tr>');
+    H.push('</table>');
+
+    /* 三、稳态结果 */
+    H.push('<h2>三、稳态温度分布计算结果</h2>');
+    H.push('<div class="rpt-result">' +
+      '<div><span>外表面温度 T_out</span><b>' + fmt(r.tOut, 1) + ' °C</b></div>' +
+      '<div><span>' + qLabel + '</span><b>' + fmt(r.q, 1) + ' ' + qUnit + '</b></div>' +
+      '<div><span>' + rLabel + '</span><b>' + fmt(r.Rtot, 4) + ' ' + rUnit + '</b></div>' +
+      '<div><span>内表面温度</span><b>' + fmt(r.tInnerSurf, 1) + ' °C</b></div>' +
+      '</div>');
+    H.push('<table class="rpt-tb"><tr><th>层</th><th>热面<br>(°C)</th><th>冷面<br>(°C)</th><th>平均温度<br>(°C)</th>' +
+           '<th>λ<br>W/(m·K)</th><th>温降<br>(°C)</th></tr>');
+    r.layers.forEach(function(L, i){
+      var th = r.surf[i], tc = r.surf[i + 1];
+      H.push('<tr><td class="l">' + esc(L.name) + '</td><td>' + fmt(th, 1) + '</td><td>' + fmt(tc, 1) +
+             '</td><td>' + fmt((th + tc) / 2, 1) + '</td><td>' + fmt(r.lam[i], 3) +
+             '</td><td>' + fmt(th - tc, 1) + '</td></tr>');
+    });
+    H.push('<tr><td class="l">外表面 → 环境</td><td>' + fmt(r.tOut, 1) + '</td><td>' + fmt(r.tAir, 1) +
+           '</td><td>' + fmt((r.tOut + r.tAir) / 2, 1) + '</td><td>h₂=' + fmt(r.hOut, 1) +
+           '</td><td>' + fmt(r.tOut - r.tAir, 1) + '</td></tr>');
+    H.push('</table>');
+    var judge = r.tOut > 60 ? "高于 60 °C，存在烫伤风险；并超出 GB/T 3486 规定的 50 °C 限值。"
+              : (r.tOut > 50 ? "低于 60 °C 烫伤阈值，但超出 GB/T 3486 规定的 50 °C 限值。"
+              : "低于 50 °C，接触安全且满足 GB/T 3486 限值要求。");
+    H.push('<p class="rpt-p">结论：外表面温度 ' + fmt(r.tOut, 1) + ' °C，' + judge + '</p>');
+
+    /* 四、降温曲线 */
+    var svg = document.querySelector("#kChart");
+    var kpiNodes = document.querySelectorAll("#kpis .kpi");
+    var legendNodes = document.querySelectorAll("#kLegend .lg");
+    if(svg && svg.querySelector("path") && kpiNodes.length){
+      var kpis = [];
+      Array.prototype.forEach.call(kpiNodes, function(k){
+        var a = k.querySelector(".k"), b = k.querySelector(".v");
+        if(a && b) kpis.push([a.innerText.trim(), b.innerText.trim()]);
+      });
+      var legend = [];
+      Array.prototype.forEach.call(legendNodes, function(n){ legend.push(n.innerText.trim()); });
+      var srcMode = document.querySelector("input[name=srcMode]:checked");
+      var isManual = srcMode && srcMode.value === "manual";
+      var cool = [];
+      if(isManual){
+        cool.push("数据来源：手动输入数据");
+      } else {
+        cool.push("数据来源：由选项卡 ① 稳态计算同步（一维瞬态导热）");
+        cool.push("内侧边界：" + selText("#innerMode"));
+        cool.push("计算时长：" + val("#tcEnd") + " " + selText("#timeUnit"));
+        cool.push("取样点数：" + val("#tcPoints"));
+      }
+      H.push('<h2 class="rpt-page">四、停炉降温曲线（各界面温度—时间）</h2>');
+      H.push('<p class="rpt-p">' + esc(cool.join("；")) + '。</p>');
+      H.push('<figure>' + grayChart(svg).outerHTML +
+             '<figcaption>图 1　各界面温度随时间变化（曲线依次：' + esc(legend.join("、")) +
+             '；线型依次为实线、虚线、点线、点划线）</figcaption></figure>');
+      if(kpis.length) H.push(pairTable(kpis));
+    }
+
+    /* 五、依据与说明 */
+    H.push('<h2>五、计算依据、假设与说明</h2>');
+    H.push('<div class="rpt-formula">' +
+      '多层平壁：R_total = 1/h₁ + Σ(δᵢ/λᵢ) + 1/h₂；&nbsp; q = (T_热侧 − T∞) / R_total<br>' +
+      '圆筒壁（每米）：R_L = 1/(2πr₁h₁) + Σ[ln(r_{i+1}/rᵢ)/(2πλᵢ)] + 1/(2πr_Nh₂)；&nbsp; q_L = ΔT / R_L；&nbsp; q″ = q_L/(2πr_N)<br>' +
+      '逐层降温：T_{i+1} = Tᵢ − q·Rᵢ；&nbsp; 外表面：T_out = T∞ + q/h₂<br>' +
+      '自动 h₂：h₂ = 1.42(ΔT/H)^0.25 + εσ(T_s⁴ − T∞⁴)/(T_s − T∞)，σ = 5.67×10⁻⁸ W/(m²·K⁴)<br>' +
+      '瞬态：ρc ∂T/∂t = ∂/∂x(λ∂T/∂x)（圆筒为 (1/r)∂/∂r(rλ∂T/∂r)），有限体积 + Crank–Nicolson 隐式格式' +
+      '</div>');
+    H.push('<ul>' +
+      '<li>模型假设：一维导热、材料均质、无内热源；忽略层间接触热阻、内表面结焦/积灰及材料相变（脱晶、析晶）。</li>' +
+      '<li>导热系数按各层平均温度取值；实际材料性能随温度、批次差异较大，应以厂家数据或实测为准。</li>' +
+      '<li>外表面换热系数为对流与辐射的综合值；高温时辐射占主导，建议取 15~30 W/(m²·K) 或使用自动计算。</li>' +
+      '<li>圆筒壁按单位长度计算，未计入端部与开孔散热；平壁与圆筒的差异随内径减小而增大。</li>' +
+      '<li>降温曲线假定停炉瞬间为稳态温度场，内侧边界条件为用户所选（绝热/恒温/与气体换热）。</li>' +
+      '</ul>');
+    H.push('<div class="foot">本报告由「耐火材料温度计算器」' + (window.APP_VERSION ? ' v' + esc(window.APP_VERSION) : '') + ' 自动生成（' + esc(t) +
+      '）。计算结果基于理想化一维模型，仅供工程估算与方案比较参考；设计与安全校核请以材料厂家导热数据、相关标准及实测结果为准。</div>');
+
+    host.innerHTML = H.join("");
+    return true;
+  }
+
+  function doPrint(){
+    if(!buildReport()){
+      alert("当前参数不完整或存在错误，请先修正选项卡 ① 的输入，再打印报告。");
+      return;
+    }
+    window.print();
+  }
+
+  // 浏览器自身打印（Ctrl+P）也走同一套报告
+  window.addEventListener("beforeprint", function(){ buildReport(); });
+  var btn = $("#printBtn");
+  if(btn) btn.addEventListener("click", doPrint);
+})();
+</script>
+<script>
+/* ==================== 版本与自动更新 ====================
+   发布新版本时：
+     ① 改下面的 VERSION / BUILD
+     ② 更新你服务器上的 version.js 清单
+   清单（version.js）示例：
+     window.__APP_UPDATE__ = {
+       version: "1.0.1",
+       build:   "2026-11-02",
+       url:     "https://你的地址/index.html",     // 新版文件（建议放 .zip 触发下载）
+       notes:   "修正 h2 自动计算的边界；新增 3 种材料预设"
+     };
+   ======================================================== */
+(function(){
+  "use strict";
+
+  var VERSION = "1.0.1";
+  var BUILD   = "2026-10-19";
+
+  /* ★ 更新清单地址
+     · MANIFEST_REL：托管在 GitHub Pages 等服务器上时用（相对路径、同源，最省事）
+     · MANIFEST    ：把文件发给别人、对方本地双击打开时用（必须是绝对地址）
+     两者留空则不做联网检查（页脚仍显示版本号） */
+  var MANIFEST_REL = "version.js";
+  var MANIFEST = "";
+
+  var KEY = "rmcalc.skipVer";
+  var checking = false;
+  var lastCheck = 0;
+  window.APP_VERSION = VERSION;
+
+  function manifestUrl(){
+    if(location.protocol !== "file:" && MANIFEST_REL) return MANIFEST_REL;
+    return MANIFEST;
+  }
+
+  function $(s){ return document.querySelector(s); }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function cmp(a, b){
+    var A = String(a || "0").split("."), B = String(b || "0").split(".");
+    for(var i = 0; i < 3; i++){
+      var x = parseInt(A[i] || "0", 10), y = parseInt(B[i] || "0", 10);
+      if(x !== y) return x > y ? 1 : -1;
+    }
+    return 0;
+  }
+  function skipped(v){ try { return localStorage.getItem(KEY) === v; } catch(e){ return false; } }
+  function skip(v){ try { localStorage.setItem(KEY, v); } catch(e){} }
+
+  function closeBar(){ var el = $("#updbar"); if(el && el.parentNode) el.parentNode.removeChild(el); }
+
+  function toast(msg, ms){
+    closeBar();
+    var el = document.createElement("div");
+    el.id = "updbar"; el.className = "updbar";
+    el.innerHTML = '<div>' + esc(msg) + '</div>';
+    document.body.appendChild(el);
+    setTimeout(closeBar, ms || 2800);
+  }
+
+  function banner(info){
+    closeBar();
+    var el = document.createElement("div");
+    el.id = "updbar"; el.className = "updbar";
+    var h = '<div><b>发现新版本 v' + esc(info.version) + '</b>' +
+            (info.build ? ' <span class="udate">' + esc(info.build) + '</span>' : '') + '</div>';
+    if(info.notes) h += '<div class="unotes">' + esc(info.notes) + '</div>';
+    // 本地文件 → 提供新版下载；网页托管 → 直接刷新即得新版
+    var primary = (location.protocol === "file:" && info.url)
+      ? '<a class="btn primary" href="' + esc(info.url) + '" target="_blank" rel="noopener">下载新版</a>'
+      : '<button class="btn primary" type="button" data-act="reload">刷新到最新版</button>';
+    h += '<div class="row">' + primary +
+         '<button class="btn" type="button" data-act="later">稍后</button>' +
+         '<button class="btn" type="button" data-act="skip">忽略此版本</button>' +
+         '</div>';
+    el.innerHTML = h;
+    document.body.appendChild(el);
+    el.addEventListener("click", function(e){
+      var t = e.target;
+      var a = (t && t.closest) ? t.closest("[data-act]") : null;
+      var act = a && a.getAttribute("data-act");
+      if(act === "skip"){ skip(info.version); closeBar(); }
+      else if(act === "later"){ closeBar(); }
+      else if(act === "reload"){
+        var target = new URL(location.href);
+        target.searchParams.set("_v", info.version);
+        target.searchParams.set("_t", Date.now());
+        location.replace(target.href);
+      }
+    });
+  }
+
+  function check(auto){
+    var mf = manifestUrl();
+    if(!mf){
+      if(!auto) toast("未配置更新地址（本地文件需在 MANIFEST 填绝对地址），当前为 v" + VERSION, 3800);
+      return;
+    }
+    if(checking) return;
+    checking = true;
+    lastCheck = Date.now();
+    window.__APP_UPDATE__ = null;
+    var s = document.createElement("script");
+    var timer = setTimeout(function(){
+      cleanup();
+      if(!auto) toast("检查更新超时，请稍后重试");
+    }, 15000);
+    function cleanup(){
+      clearTimeout(timer);
+      s.onload = s.onerror = null;
+      if(s.parentNode) s.parentNode.removeChild(s);
+      checking = false;
+    }
+    s.async = true;
+    s.src = mf + (mf.indexOf("?") >= 0 ? "&" : "?") + "_t=" + Date.now();
+    s.onload = function(){
+      var info = window.__APP_UPDATE__;
+      cleanup();
+      if(!info || !/^\d+\.\d+\.\d+$/.test(String(info.version))){ if(!auto) toast("更新清单格式不正确"); return; }
+      if(cmp(info.version, VERSION) > 0){
+        if(!auto || !skipped(info.version)) banner(info);
+        else if(!auto) toast("已忽略 v" + info.version + "，可在浏览器设置里清除站点数据后重试");
+      } else if(!auto){
+        toast("已是最新版本 v" + VERSION);
+      }
+    };
+    s.onerror = function(){
+      cleanup();
+      if(!auto) toast("检查更新失败：网络不通或地址不可用");
+    };
+    document.head.appendChild(s);
+  }
+
+  function init(){
+    var lbl = $("#verLabel");
+    if(lbl) lbl.textContent = "v" + VERSION + (BUILD ? "（" + BUILD + "）" : "");
+    var btn = $("#checkUpd");
+    if(btn) btn.addEventListener("click", function(){ check(false); });
+    if(manifestUrl()) {
+      setTimeout(function(){ check(true); }, 2500);
+      setInterval(function(){ if(!document.hidden) check(true); }, 5 * 60 * 1000);
+      document.addEventListener("visibilitychange", function(){
+        if(!document.hidden && Date.now() - lastCheck > 60000) check(true);
+      });
+      window.addEventListener("online", function(){ check(true); });
+    }
+  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
+</body>
+</html>
