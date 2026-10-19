@@ -2312,7 +2312,7 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.0.2";
+  var VERSION = "1.0.3";
   var BUILD   = "2026-10-19";
 
   /* ★ 更新清单地址
@@ -2325,6 +2325,7 @@ function solveTransient(cfg){
   var KEY = "rmcalc.skipVer";
   var checking = false;
   var lastCheck = 0;
+  var snooze = 0;   // 「稍后」时间戳：30 分钟内自动检查不再打扰
   window.APP_VERSION = VERSION;
 
   function manifestUrl(){
@@ -2382,7 +2383,7 @@ function solveTransient(cfg){
       var a = (t && t.closest) ? t.closest("[data-act]") : null;
       var act = a && a.getAttribute("data-act");
       if(act === "skip"){ skip(info.version); closeBar(); }
-      else if(act === "later"){ closeBar(); }
+      else if(act === "later"){ snooze = Date.now(); closeBar(); }
       else if(act === "reload"){
         var target = new URL(location.href);
         target.searchParams.set("_v", info.version);
@@ -2420,7 +2421,8 @@ function solveTransient(cfg){
       cleanup();
       if(!info || !/^\d+\.\d+\.\d+$/.test(String(info.version))){ if(!auto) toast("更新清单格式不正确"); return; }
       if(cmp(info.version, VERSION) > 0){
-        if(!auto || !skipped(info.version)) banner(info);
+        var quiet = auto && (skipped(info.version) || (snooze && Date.now() - snooze < 30 * 60 * 1000));
+        if(!quiet) banner(info);
         else if(!auto) toast("已忽略 v" + info.version + "，可在浏览器设置里清除站点数据后重试");
       } else if(!auto){
         toast("已是最新版本 v" + VERSION);
