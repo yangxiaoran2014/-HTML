@@ -2312,7 +2312,7 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.0.1";
+  var VERSION = "1.0.2";
   var BUILD   = "2026-10-19";
 
   /* ★ 更新清单地址
@@ -2320,7 +2320,7 @@ function solveTransient(cfg){
      · MANIFEST    ：把文件发给别人、对方本地双击打开时用（必须是绝对地址）
      两者留空则不做联网检查（页脚仍显示版本号） */
   var MANIFEST_REL = "version.js";
-  var MANIFEST = "";
+  var MANIFEST = "https://yangxiaoran2014.github.io/-HTML/version.js";
 
   var KEY = "rmcalc.skipVer";
   var checking = false;
@@ -2367,9 +2367,9 @@ function solveTransient(cfg){
     var h = '<div><b>发现新版本 v' + esc(info.version) + '</b>' +
             (info.build ? ' <span class="udate">' + esc(info.build) + '</span>' : '') + '</div>';
     if(info.notes) h += '<div class="unotes">' + esc(info.notes) + '</div>';
-    // 本地文件 → 提供新版下载；网页托管 → 直接刷新即得新版
+    // 本地文件 → 打开线上新版；网页托管 → 加版本参数刷新并绕过缓存
     var primary = (location.protocol === "file:" && info.url)
-      ? '<a class="btn primary" href="' + esc(info.url) + '" target="_blank" rel="noopener">下载新版</a>'
+      ? '<a class="btn primary" href="' + esc(info.url) + '" target="_blank" rel="noopener noreferrer">打开线上新版</a>'
       : '<button class="btn primary" type="button" data-act="reload">刷新到最新版</button>';
     h += '<div class="row">' + primary +
          '<button class="btn" type="button" data-act="later">稍后</button>' +
@@ -2395,7 +2395,7 @@ function solveTransient(cfg){
   function check(auto){
     var mf = manifestUrl();
     if(!mf){
-      if(!auto) toast("未配置更新地址（本地文件需在 MANIFEST 填绝对地址），当前为 v" + VERSION, 3800);
+      if(!auto) toast("未配置更新地址，当前为 v" + VERSION, 3800);
       return;
     }
     if(checking) return;
