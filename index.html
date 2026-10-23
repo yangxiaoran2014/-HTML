@@ -277,49 +277,87 @@
   .updbar .btn.primary{background:#fff; color:#12336b; border-color:#fff}
   .updbar .btn.primary:hover{background:#eaf1fb; color:#12336b}
 
-  /* ================= 打印报告（黑白 A4） ================= */
-  #printReport{display:none}
+  /* ================= 报告样式（打印 / 导出共用） =================
+     这些规则放在媒体查询之外：屏幕下容器 #printReport 为 display:none 不可见；
+     导出 Word/PDF 时给同一个容器临时加 .rs-live（离屏、与 A4 版心等宽），
+     以便按打印布局测量并截图。打印与导出共用同一份 DOM 和样式，不会各自演进。 */
+  #printReport{
+    display:none; font-family:"SimSun","宋体","Songti SC",serif; color:#000;
+    font-size:10.5pt; line-height:1.6;
+  }
+  #printReport h1{font-family:"SimHei","黑体","Heiti SC",sans-serif; font-size:17pt; font-weight:700;
+    text-align:center; letter-spacing:3px; margin:0 0 3mm}
+  #printReport .meta{display:flex; flex-wrap:wrap; justify-content:space-between; gap:2mm;
+    font-size:8.5pt; border-bottom:1.2pt solid #000; padding-bottom:2mm; margin-bottom:5mm}
+  #printReport h2{font-family:"SimHei","黑体","Heiti SC",sans-serif; font-size:11pt; font-weight:700;
+    margin:5mm 0 2mm; padding:2mm 0 1mm; border-bottom:.6pt solid #000;
+    page-break-after:avoid; break-after:avoid; display:block}
+  #printReport h2.rpt-page{break-before:page; page-break-before:always; padding-top:10mm}
+  #printReport h2::before{content:none}
+  #printReport p{font-size:9.5pt; margin:0 0 2.5mm}
+  #printReport .rpt-tb, #printReport .rpt-kv{width:100%; border-collapse:collapse; font-size:9pt;
+    margin:0 0 3mm; page-break-inside:avoid}
+  #printReport th, #printReport td{border:.5pt solid #000; padding:1.4mm 1.8mm; text-align:right;
+    background:#fff !important; color:#000 !important; white-space:normal; word-break:break-word}
+  #printReport th{font-family:"SimHei","黑体",sans-serif; font-weight:700; text-align:center}
+  #printReport td.l{text-align:left}
+  #printReport .rpt-result{display:grid; grid-template-columns:repeat(4,1fr); border:.8pt solid #000;
+    margin:0 0 3.5mm; page-break-inside:avoid}
+  #printReport .rpt-result > div{padding:2.4mm 2.8mm; border-right:.5pt solid #000}
+  #printReport .rpt-result > div:last-child{border-right:0}
+  #printReport .rpt-result span{display:block; font-size:8pt}
+  #printReport .rpt-result b{font-size:12.5pt}
+  #printReport figure{margin:0 0 3mm; page-break-inside:avoid}
+  #printReport figure svg{width:100%; height:auto; display:block; border:.5pt solid #000}
+  #printReport figcaption{font-size:8pt; text-align:center; margin-top:1.5mm}
+  #printReport .rpt-formula{font-family:"Courier New",Consolas,monospace; font-size:8.5pt;
+    line-height:1.75; margin:0 0 3mm; white-space:pre-wrap; word-break:break-word}
+  #printReport ul{margin:0 0 3mm; padding-left:5mm; font-size:9pt}
+  #printReport li{margin:.8mm 0}
+  #printReport .foot{margin-top:5mm; padding-top:2mm; border-top:.5pt solid #000;
+    font-size:7.8pt; line-height:1.6}
+
+  /* 导出用离屏副本：与打印版心等宽（210 − 15 − 15 = 180 mm），按打印布局测量 */
+  #printReport.rs-live{
+    display:block !important; position:absolute; left:-30000px; top:0; width:180mm;
+    margin:0; padding:0; background:#fff; z-index:-1;
+  }
+
+  /* ===== 导出菜单 / 轻提示 ===== */
+  .expwrap{position:relative; margin-left:8px}
+  .expbtn{font-size:12.5px; color:#fff; border-color:rgba(255,255,255,.45); background:rgba(255,255,255,.14)}
+  .expbtn:hover{background:rgba(255,255,255,.26); color:#fff; border-color:#fff}
+  .expmenu{
+    position:absolute; right:0; top:calc(100% + 8px); z-index:60; width:274px;
+    background:#fff; color:var(--txt); border:1px solid var(--line); border-radius:12px;
+    box-shadow:0 14px 34px rgba(12,39,73,.22); padding:5px; font-size:13px;
+  }
+  .expmenu[hidden]{display:none}
+  .expmenu button{
+    display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; border:0;
+    background:transparent; font:inherit; padding:9px 11px; border-radius:8px; cursor:pointer; color:inherit;
+  }
+  .expmenu button:hover{background:#f3f7fd}
+  .expmenu button:disabled{opacity:.5; cursor:progress}
+  .expmenu button b{font-size:13px; font-weight:600}
+  .expmenu button i{font-style:normal; font-size:11px; color:var(--dim); line-height:1.45}
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translate(-50%,10px); z-index:90;
+    background:rgba(12,32,60,.95); color:#fff; font-size:12.5px; padding:9px 16px; border-radius:10px;
+    box-shadow:0 10px 26px rgba(9,25,48,.32); opacity:0; pointer-events:none;
+    transition:opacity .18s, transform .18s; max-width:calc(100vw - 40px);
+  }
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+
   @media print{
     /* 页边距设 0 可让浏览器不再打印自带的页眉页脚（URL、日期、页码），
        版心留白改由 #printReport 的 padding 提供 */
     @page{size:A4; margin:0}
     html,body{background:#fff !important; color:#000 !important}
     body{font-size:10.5pt; line-height:1.6}
-    .topbar, main, footer, #tip, .updbar{display:none !important}
+    .topbar, main, footer, #tip, .updbar, .expmenu, .toast{display:none !important}
     #printReport{display:block !important; max-width:100%; overflow-x:hidden;
-      padding:14mm 15mm 12mm;
-      font-family:"SimSun","宋体","Songti SC",serif; color:#000}
-    #printReport h1{font-family:"SimHei","黑体","Heiti SC",sans-serif; font-size:17pt; font-weight:700;
-      text-align:center; letter-spacing:3px; margin:0 0 3mm}
-    #printReport .meta{display:flex; flex-wrap:wrap; justify-content:space-between; gap:2mm;
-      font-size:8.5pt; border-bottom:1.2pt solid #000; padding-bottom:2mm; margin-bottom:5mm}
-    #printReport h2{font-family:"SimHei","黑体","Heiti SC",sans-serif; font-size:11pt; font-weight:700;
-      margin:5mm 0 2mm; padding:2mm 0 1mm; border-bottom:.6pt solid #000;
-      page-break-after:avoid; break-after:avoid; display:block}
-    #printReport h2.rpt-page{break-before:page; page-break-before:always; padding-top:10mm}
-    #printReport h2::before{content:none}
-    #printReport p{font-size:9.5pt; margin:0 0 2.5mm}
-    #printReport .rpt-tb, #printReport .rpt-kv{width:100%; border-collapse:collapse; font-size:9pt;
-      margin:0 0 3mm; page-break-inside:avoid}
-    #printReport th, #printReport td{border:.5pt solid #000; padding:1.4mm 1.8mm; text-align:right;
-      background:#fff !important; color:#000 !important; white-space:normal; word-break:break-word}
-    #printReport th{font-family:"SimHei","黑体",sans-serif; font-weight:700; text-align:center}
-    #printReport td.l{text-align:left}
-    #printReport .rpt-result{display:grid; grid-template-columns:repeat(4,1fr); border:.8pt solid #000;
-      margin:0 0 3.5mm; page-break-inside:avoid}
-    #printReport .rpt-result > div{padding:2.4mm 2.8mm; border-right:.5pt solid #000}
-    #printReport .rpt-result > div:last-child{border-right:0}
-    #printReport .rpt-result span{display:block; font-size:8pt}
-    #printReport .rpt-result b{font-size:12.5pt}
-    #printReport figure{margin:0 0 3mm; page-break-inside:avoid}
-    #printReport figure svg{width:100%; height:auto; display:block; border:.5pt solid #000}
-    #printReport figcaption{font-size:8pt; text-align:center; margin-top:1.5mm}
-    #printReport .rpt-formula{font-family:"Courier New",Consolas,monospace; font-size:8.5pt;
-      line-height:1.75; margin:0 0 3mm; white-space:pre-wrap; word-break:break-word}
-    #printReport ul{margin:0 0 3mm; padding-left:5mm; font-size:9pt}
-    #printReport li{margin:.8mm 0}
-    #printReport .foot{margin-top:5mm; padding-top:2mm; border-top:.5pt solid #000;
-      font-size:7.8pt; line-height:1.6}
+      padding:14mm 15mm 12mm}
   }
 
   @media (max-width:1120px){
@@ -335,6 +373,9 @@
     .topbar{padding:6px 10px; gap:6px; min-height:0}
     .brand b{font-size:15px}
     .printbtn{order:2; margin-left:auto; padding:5px 9px; font-size:11.5px}
+    .expwrap{order:2; margin-left:6px}
+    .expbtn{padding:5px 8px; font-size:11.5px}
+    .expmenu{width:min(274px, calc(100vw - 22px))}
     .tabs{order:3; margin-left:0; width:100%; padding:3px}
     .tab{flex:1; text-align:center; padding:6px 8px; font-size:12.5px}
   }
@@ -355,6 +396,21 @@
     <button class="tab" type="button" data-panel="panelCurve">② 降温曲线</button>
   </nav>
   <button class="btn printbtn" id="printBtn" type="button" title="生成黑白计算报告并调用浏览器打印（Ctrl+P 同样有效）">打印报告</button>
+  <div class="expwrap" id="expWrap">
+    <button class="btn expbtn" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false"
+            title="把与打印完全相同内容的报告导出为 Word 或 PDF 文件">导出 ▾</button>
+    <div class="expmenu" id="exportMenu" role="menu" hidden>
+      <button type="button" role="menuitem" data-export="docx">
+        <b>导出 Word（.docx）</b><i>黑白 A4 版式，可在 Word 里继续编辑、加批注</i>
+      </button>
+      <button type="button" role="menuitem" data-export="pdf">
+        <b>导出 PDF（.pdf）</b><i>直接下载，无需打印机；图片型 PDF，换机也不会乱码</i>
+      </button>
+      <button type="button" role="menuitem" data-export="print">
+        <b>打印 / 另存为 PDF</b><i>交给浏览器打印，可选可选中文字的矢量 PDF</i>
+      </button>
+    </div>
+  </div>
 </header>
 
 <main>
@@ -657,6 +713,7 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     <button class="linkbtn" id="checkUpd" type="button">检查更新</button>
   </div>
 </footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 
@@ -2294,8 +2351,797 @@ function solveTransient(cfg){
   window.addEventListener("beforeprint", function(){ buildReport(); });
   var btn = $("#printBtn");
   if(btn) btn.addEventListener("click", doPrint);
+
+  // 供「导出 Word / PDF」模块复用同一份报告（内容与打印完全一致）
+  window.RPT = { build: buildReport, print: doPrint };
 })();
 </script>
+<script>
+/* ==================== 报告导出（Word .docx / PDF） ====================
+   两种格式都由「打印报告」用的同一个 DOM（#printReport）导出，因此内容始终一致：
+     · Word —— 解析该 DOM 的标题/段落/表格/图表，直接写 OOXML，再用极简 ZIP 打包成 .docx
+     · PDF  —— 把每个块离屏渲染成图片，按 A4 版心（180×271 mm）分页，拼成图片型 PDF
+   全部在前端完成，不联网、不引入任何第三方库。
+   ==================================================================== */
+(function(){
+  "use strict";
+  var $ = function(s){ return document.querySelector(s); };
+  var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  /* A4 版心：与 @media print 中 #printReport 的 padding（15/15/14/12 mm）对应 */
+  var PAGE_W_MM = 180, PAGE_H_MM = 271;
+  var PX_PER_MM = 96 / 25.4;
+  var PAGE_W_CSS = PAGE_W_MM * PX_PER_MM;      // 680.31 px
+  var PAGE_H_CSS = PAGE_H_MM * PX_PER_MM;      // 1024.25 px
+  var PDF_DPI = 300;
+  var PDF_SCALE = PDF_DPI / 96;                // 3.125
+  var TW_PER_MM = 56.6929, EMU_PER_MM = 36000;
+  var CONTENT_TW = Math.round(PAGE_W_MM * TW_PER_MM);   // 10205 twips
+
+  /* ---------------- 基础工具 ---------------- */
+  var encoder = new TextEncoder();
+  function enc(s){ return encoder.encode(s); }
+  function b64ToBytes(b64){
+    var bin = atob(b64), n = bin.length, out = new Uint8Array(n);
+    for(var i = 0; i < n; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function pad0(n){ return (n < 10 ? "0" : "") + n; }
+  function stampName(ext){
+    var d = new Date();
+    return "炉衬温度计算报告_" + d.getFullYear() + pad0(d.getMonth() + 1) + pad0(d.getDate()) +
+           "_" + pad0(d.getHours()) + pad0(d.getMinutes()) + "." + ext;
+  }
+  function xesc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[c];
+    });
+  }
+  function saveBlob(blob, name){
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; a.style.display = "none";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 8000);
+  }
+
+  var toastTimer = null;
+  function toast(msg, bad){
+    var el = $("#toast");
+    if(!el){ if(bad) console.warn(msg); return; }
+    el.textContent = msg;
+    el.style.background = bad ? "rgba(158,36,36,.96)" : "";
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ el.classList.remove("show"); }, bad ? 5000 : 2400);
+  }
+
+  /* ---------------- 报告 DOM -> 结构化块 ----------------
+     只做「读」，不改动报告本身；标题、段落、表格、图表等按块返回，
+     Word 与 PDF 两条导出链路共用，保证与打印同一内容。 */
+  function textLines(el){
+    var out = "";
+    (function walk(node){
+      for(var n = node.firstChild; n; n = n.nextSibling){
+        if(n.nodeType === 3){ out += n.nodeValue; }
+        else if(n.nodeType === 1){
+          var tag = n.tagName.toLowerCase();
+          if(tag === "br") out += "\n";
+          else if(tag === "svg" || tag === "img") continue;
+          else walk(n);
+        }
+      }
+    })(el);
+    return out.replace(/[ \t\u00a0]+/g, " ").replace(/ *\n */g, "\n")
+              .replace(/^\s+/, "").replace(/\s+$/, "");
+  }
+  function kpiItems(el){
+    return Array.prototype.map.call(el.children, function(d){
+      var s = d.querySelector("span"), b = d.querySelector("b");
+      return { label: s ? textLines(s) : "", value: b ? textLines(b) : "" };
+    });
+  }
+  function cellOf(td){
+    var tag = td.tagName.toLowerCase(), cls = td.className || "";
+    return {
+      lines: textLines(td).split("\n"),
+      colSpan: td.colSpan || 1,
+      head: tag === "th",
+      align: tag === "th" ? "center" : (/(^|\s)l(\s|$)/.test(cls) ? "left" : "right")
+    };
+  }
+  function colWidths(tb, cols){
+    var best = null, bestN = 0, i;
+    Array.prototype.forEach.call(tb.rows, function(tr){
+      if(tr.cells.length > bestN){ bestN = tr.cells.length; best = tr; }
+    });
+    var w = [], ok = false;
+    if(best){
+      var idx = 0;
+      Array.prototype.forEach.call(best.cells, function(td){
+        var span = td.colSpan || 1, ww = td.offsetWidth / span;
+        if(!(ww > 0)) return;
+        ok = true;
+        for(var k = 0; k < span; k++) w[idx + k] = ww;
+        idx += span;
+      });
+    }
+    for(i = 0; i < cols; i++){ if(!(w[i] > 0)) w[i] = ok ? 1 : 1; }
+    var tot = 0;
+    for(i = 0; i < cols; i++) tot += w[i];
+    if(!(tot > 0)) tot = cols;
+    var out = [];
+    for(i = 0; i < cols; i++) out.push(w[i] / tot);
+    return out;
+  }
+  function readBlocks(host){
+    var blocks = [], kids = host.children;
+    for(var i = 0; i < kids.length; i++){
+      var el = kids[i], tag = el.tagName.toLowerCase(), cls = el.className || "";
+      var b;
+      if(tag === "h1") b = { kind:"title", text:textLines(el) };
+      else if(tag === "h2") b = { kind:"h2", text:textLines(el), page:/(^|\s)rpt-page(\s|$)/.test(cls) };
+      else if(tag === "table"){
+        var rows = [], cols = 0;
+        Array.prototype.forEach.call(el.rows, function(tr){
+          var cells = [], total = 0;
+          Array.prototype.forEach.call(tr.cells, function(td){
+            var c = cellOf(td); total += c.colSpan; cells.push(c);
+          });
+          if(total > cols) cols = total;
+          rows.push(cells);
+        });
+        b = { kind:"table", rows:rows, cols:cols, widths:colWidths(el, cols) };
+      }
+      else if(/rpt-result/.test(cls)) b = { kind:"kpi", items:kpiItems(el) };
+      else if(tag === "figure"){
+        var cap = el.querySelector("figcaption");
+        b = { kind:"figure", svg:el.querySelector("svg"), caption:cap ? textLines(cap) : "" };
+      }
+      else if(/rpt-formula/.test(cls)) b = { kind:"code", text:textLines(el) };
+      else if(tag === "ul"){
+        b = { kind:"list", items:Array.prototype.map.call(el.children, function(li){ return textLines(li); }) };
+      }
+      else if(/foot/.test(cls)) b = { kind:"foot", text:textLines(el) };
+      else if(/meta/.test(cls)) b = { kind:"meta", text:textLines(el) };
+      else b = { kind:"p", text:textLines(el) };
+      b.el = el;
+      blocks.push(b);
+    }
+    return blocks;
+  }
+  function measure(blocks){
+    blocks.forEach(function(b){
+      var r = b.el.getBoundingClientRect(), cs = getComputedStyle(b.el);
+      b.h = r.height;
+      b.w = r.width;
+      b.mt = parseFloat(cs.marginTop) || 0;
+      b.mb = parseFloat(cs.marginBottom) || 0;
+    });
+  }
+
+  /* ---------------- 离屏渲染（HTML -> 位图） ----------------
+     把报告块套进 <svg><foreignObject>，内嵌打印报告实际使用的 CSS（运行期从
+     document.styleSheets 抽取 #printReport 规则），再用 Image 解码后画到 canvas。
+     这样导出的排版与打印完全同源，改动打印样式时导出自动跟随。 */
+  var CSS_CACHE = null;
+  function reportCss(){
+    if(CSS_CACHE !== null) return CSS_CACHE;
+    var out = [], i, j;
+    for(i = 0; i < document.styleSheets.length; i++){
+      var rules = null;
+      try{ rules = document.styleSheets[i].cssRules; }catch(e){ rules = null; }
+      if(!rules) continue;
+      for(j = 0; j < rules.length; j++){
+        var r = rules[j];
+        if(r.type !== 1) continue;                          // 仅样式规则，跳过 @media 等
+        var sel = r.selectorText || "";
+        if(sel.indexOf("#printReport ") === 0) out.push(r.cssText);
+      }
+    }
+    CSS_CACHE = out.join("\n");
+    return CSS_CACHE;
+  }
+  var SVG_NS = "http://www.w3.org/2000/svg", XHTML_NS = "http://www.w3.org/1999/xhtml";
+  /* 离屏渲染环境要补齐应用里的全局 reset：缺 box-sizing 会让 width:100% 的表格
+     按内容宽计算，右侧多出约一个 padding 的宽度而被裁掉 */
+  var SHOT_RESET = "*,*::before,*::after{box-sizing:border-box}" +
+    "html,body{margin:0;padding:0;background:#fff;color:#000}";
+  function shotDataUrl(node, wCss, hCss, scale){
+    // 用 DOM + XMLSerializer 生成 SVG：空元素（<br> 等）自动写成自闭合，
+    // 直接拼 HTML 字符串再交给 XML 解析会因 <br> 未闭合而整张图解码失败。
+    var W = Math.max(1, Math.ceil(wCss * scale)), H = Math.max(1, Math.ceil(hCss * scale));
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("xmlns", SVG_NS);
+    svg.setAttribute("width", W);
+    svg.setAttribute("height", H);
+    svg.setAttribute("viewBox", "0 0 " + wCss + " " + hCss);
+    var fo = document.createElementNS(SVG_NS, "foreignObject");
+    fo.setAttribute("x", 0);
+    fo.setAttribute("y", 0);
+    fo.setAttribute("width", wCss);
+    fo.setAttribute("height", hCss);
+    var wrap = document.createElementNS(XHTML_NS, "div");
+    wrap.setAttribute("id", "printReport");
+    wrap.setAttribute("style", "display:block;position:static;width:" + wCss + "px;margin:0;" +
+      "padding:0;border:0;background:#fff;color:#000;font-size:10.5pt;line-height:1.6;" +
+      "font-family:SimSun,\u5b8b\u4f53,Songti SC,serif");
+    var style = document.createElement("style");
+    style.textContent = SHOT_RESET + reportCss();
+    wrap.appendChild(style);
+    wrap.appendChild(node);
+    fo.appendChild(wrap);
+    svg.appendChild(fo);
+    var str = new XMLSerializer().serializeToString(svg);
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(str);
+  }
+  function loadImage(url){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      img.onload = function(){ resolve(img); };
+      img.onerror = function(){ reject(new Error("图形渲染失败")); };
+      img.src = url;
+    });
+  }
+  function newCanvas(w, h){
+    var cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(w));
+    cv.height = Math.max(1, Math.round(h));
+    var ctx = cv.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    return cv;
+  }
+  async function shotBlock(el, wCss, hCss, scale){
+    var clone = el.cloneNode(true);
+    clone.style.margin = "0";
+    var img = await loadImage(shotDataUrl(clone, wCss, hCss, scale));
+    var cv = newCanvas(wCss * scale, hCss * scale);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+
+  /* ---------------- 生成前的准备：复用打印报告 ---------------- */
+  function prepare(){
+    var host = $("#printReport");
+    if(!host || !window.RPT || !window.RPT.build()){
+      toast("当前参数不完整或有误，请先修正选项卡 ① 的输入。", true);
+      return null;
+    }
+    host.classList.add("rs-live");
+    void host.offsetHeight;                       // 强制重排，确保测到真实尺寸
+    return host;
+  }
+  function release(){
+    var host = $("#printReport");
+    if(host) host.classList.remove("rs-live");
+  }
+
+  /* ==================== 1) Word（.docx） ==================== */
+  function wRun(text, o){
+    o = o || {};
+    var font = o.font || "SimSun", ea = o.eastAsia || "\u5b8b\u4f53";
+    var sz = o.sz || 19;
+    var rpr = "<w:rPr>" + '<w:rFonts w:ascii="' + font + '" w:hAnsi="' + font +
+      '" w:eastAsia="' + ea + '" w:cs="' + font + '"/>';
+    if(o.bold) rpr += "<w:b/><w:bCs/>";
+    if(o.spacing) rpr += '<w:spacing w:val="' + o.spacing + '"/>';
+    rpr += '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/></w:rPr>';
+    var t = xesc(text).replace(/\n/g, '</w:t><w:br/><w:t xml:space="preserve">');
+    return "<w:r>" + rpr + '<w:t xml:space="preserve">' + t + "</w:t></w:r>";
+  }
+  function wPara(runs, o){
+    o = o || {};
+    var ppr = "<w:pPr>";
+    if(o.keepNext) ppr += "<w:keepNext/>";
+    if(o.pageBreak) ppr += "<w:pageBreakBefore/>";
+    if(o.border){
+      var sides = (o.border === "all") ? ["top", "left", "bottom", "right"] : [o.border];
+      ppr += "<w:pBdr>";
+      sides.forEach(function(s){
+        ppr += '<w:' + s + ' w:val="single" w:sz="' + (o.borderSz || 4) +
+               '" w:space="' + (o.borderSpace || 2) + '" w:color="000000"/>';
+      });
+      ppr += "</w:pBdr>";
+    }
+    ppr += '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after || 0) +
+           '" w:line="' + (o.line || 384) + '" w:lineRule="auto"/>';
+    if(o.indent || o.hanging){
+      ppr += '<w:ind w:left="' + (o.indent || 0) + '"' + (o.hanging ? ' w:hanging="' + o.hanging + '"' : "") + "/>";
+    }
+    if(o.align) ppr += '<w:jc w:val="' + o.align + '"/>';
+    ppr += "</w:pPr>";
+    return "<w:p>" + ppr + (Array.isArray(runs) ? runs.join("") : runs) + "</w:p>";
+  }
+  function wGap(tw){
+    return '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="' + tw +
+           '" w:lineRule="exact"/></w:pPr></w:p>';
+  }
+  function wCell(cell, widths, idx, sz){
+    var span = cell.colSpan || 1, w = 0, k;
+    for(k = 0; k < span && idx + k < widths.length; k++) w += widths[idx + k];
+    var tcpr = "<w:tcPr>" + '<w:tcW w:w="' + Math.max(1, Math.round(w * 5000)) + '" w:type="pct"/>';
+    if(span > 1) tcpr += '<w:gridSpan w:val="' + span + '"/>';
+    tcpr += '<w:vAlign w:val="center"/></w:tcPr>';
+    var lines = cell.lines.length ? cell.lines : [""];
+    var paras = lines.map(function(ln){
+      return wPara(wRun(ln, { bold:cell.head, sz:sz }), { align:cell.align, line:264 });
+    }).join("");
+    return "<w:tc>" + tcpr + paras + "</w:tc>";
+  }
+  function wTable(block){
+    var widths = block.widths, grid = widths.map(function(f){
+      return '<w:gridCol w:w="' + Math.max(120, Math.round(f * CONTENT_TW)) + '"/>';
+    }).join("");
+    var borders = ["top", "left", "bottom", "right", "insideH", "insideV"].map(function(s){
+      return '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="000000"/>';
+    }).join("");
+    var rows = block.rows.map(function(cells, ri){
+      var idx = 0, tds = "";
+      cells.forEach(function(c){ tds += wCell(c, widths, idx, 18); idx += (c.colSpan || 1); });
+      return "<w:tr><w:trPr><w:cantSplit/>" + (ri === 0 ? "<w:tblHeader/>" : "") + "</w:trPr>" + tds + "</w:tr>";
+    }).join("");
+    return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:jc w:val="center"/>' +
+      "<w:tblBorders>" + borders + "</w:tblBorders>" +
+      '<w:tblLayout w:type="fixed"/><w:tblCellMar>' +
+      '<w:top w:w="79" w:type="dxa"/><w:left w:w="102" w:type="dxa"/>' +
+      '<w:bottom w:w="79" w:type="dxa"/><w:right w:w="102" w:type="dxa"/>' +
+      "</w:tblCellMar></w:tblPr><w:tblGrid>" + grid + "</w:tblGrid>" + rows + "</w:tbl>";
+  }
+  function wKpi(block){
+    var borders = ["top", "left", "bottom", "right", "insideV"].map(function(s){
+      return '<w:' + s + ' w:val="single" w:sz="6" w:space="0" w:color="000000"/>';
+    }).join("");
+    var cells = block.items.map(function(it){
+      return "<w:tc><w:tcPr><w:tcW w:w=\"1250\" w:type=\"pct\"/><w:vAlign w:val=\"center\"/></w:tcPr>" +
+        wPara(wRun(it.label, { sz:16 }), { line:260, after:20 }) +
+        wPara(wRun(it.value, { sz:25, bold:true }), { line:300 }) + "</w:tc>";
+    }).join("");
+    return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>' + borders + "</w:tblBorders>" +
+      '<w:tblLayout w:type="fixed"/><w:tblCellMar>' +
+      '<w:top w:w="85" w:type="dxa"/><w:left w:w="106" w:type="dxa"/>' +
+      '<w:bottom w:w="85" w:type="dxa"/><w:right w:w="106" w:type="dxa"/>' +
+      "</w:tblCellMar></w:tblPr><w:tblGrid>" +
+      '<w:gridCol w:w="2551"/><w:gridCol w:w="2551"/><w:gridCol w:w="2551"/><w:gridCol w:w="2551"/>' +
+      "</w:tblGrid><w:tr>" + cells + "</w:tr></w:tbl>";
+  }
+  function wImagePara(id, im){
+    var cx = Math.round(PAGE_W_MM * EMU_PER_MM);
+    var cy = Math.round(cx * im.h / im.w);
+    return '<w:p><w:pPr><w:pBdr>' +
+      '<w:top w:val="single" w:sz="4" w:space="3" w:color="000000"/>' +
+      '<w:left w:val="single" w:sz="4" w:space="3" w:color="000000"/>' +
+      '<w:bottom w:val="single" w:sz="4" w:space="3" w:color="000000"/>' +
+      '<w:right w:val="single" w:sz="4" w:space="3" w:color="000000"/></w:pBdr>' +
+      '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' +
+      '<w:jc w:val="center"/></w:pPr>' +
+      '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+      '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+      '<wp:docPr id="' + id + '" name="chart' + id + '.png" descr="' + xesc(im.alt || "") + '"/>' +
+      '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + id + '" name="chart' + id + '.png"/>' +
+      '<pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr></pic:nvPicPr>' +
+      '<pic:blipFill><a:blip r:embed="rIdImg' + id + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
+      "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>";
+  }
+  function figureToPng(svg){
+    return new Promise(function(resolve, reject){
+      if(!svg){ resolve(null); return; }
+      var clone = svg.cloneNode(true);
+      var ratio = 0.55, vb = (clone.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+      if(vb.length === 4 && vb[2] > 0 && vb[3] > 0) ratio = vb[3] / vb[2];
+      var wCss = Math.round(PAGE_W_CSS), hCss = Math.round(wCss * ratio);
+      clone.setAttribute("width", wCss);
+      clone.setAttribute("height", hCss);
+      clone.setAttribute("style", "display:block;width:" + wCss + "px;height:" + hCss + "px;border:0");
+      loadImage(shotDataUrl(clone, wCss, hCss, 2.6)).then(function(img){
+        var cv = newCanvas(wCss * 2.6, hCss * 2.6);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        var b64 = cv.toDataURL("image/png").split(",")[1];
+        resolve({ bytes: b64ToBytes(b64), w: cv.width, h: cv.height, alt: "各界面温度随时间变化" });
+      }).catch(reject);
+    });
+  }
+  function docxCore(date){
+    var iso = date.toISOString().replace(/\.\d+Z$/, "Z");
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"' +
+      ' xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"' +
+      ' xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      "<dc:title>耐火材料炉衬温度计算报告</dc:title>" +
+      "<dc:creator>耐火材料温度计算器</dc:creator>" +
+      "<cp:lastModifiedBy>耐火材料温度计算器</cp:lastModifiedBy>" +
+      '<dcterms:created xsi:type="dcterms:W3CDTF">' + iso + "</dcterms:created>" +
+      '<dcterms:modified xsi:type="dcterms:W3CDTF">' + iso + "</dcterms:modified></cp:coreProperties>";
+  }
+  function docxStyles(){
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      "<w:docDefaults><w:rPrDefault><w:rPr>" +
+      '<w:rFonts w:ascii="SimSun" w:hAnsi="SimSun" w:eastAsia="\u5b8b\u4f53" w:cs="SimSun"/>' +
+      '<w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="en-US" w:eastAsia="zh-CN" w:bidi="ar-SA"/>' +
+      "</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>" +
+      '<w:spacing w:line="384" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+      '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/>' +
+      '<w:tblPr><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/>' +
+      '<w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +
+      "</w:styles>";
+  }
+  function docxContentTypes(nMedia){
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Default Extension="png" ContentType="image/png"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      "</Types>";
+  }
+
+  /* ---- 极简 ZIP（仅 store，无压缩）；docx 是 zip 包，直接手写即可 ---- */
+  var CRC_TABLE = (function(){
+    var t = new Uint32Array(256);
+    for(var n = 0; n < 256; n++){
+      var c = n;
+      for(var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes){
+    var c = 0xFFFFFFFF;
+    for(var i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipStore(files, when){
+    var parts = [], central = [], offset = 0;
+    var time = (when.getHours() << 11) | (when.getMinutes() << 5) | (when.getSeconds() >> 1);
+    var date = ((when.getFullYear() - 1980) << 9) | ((when.getMonth() + 1) << 5) | when.getDate();
+    files.forEach(function(f){
+      var name = enc(f.name), data = f.data, n = data.length, crc = crc32(data);
+      var lh = new Uint8Array(30 + name.length), dv = new DataView(lh.buffer);
+      dv.setUint32(0, 0x04034b50, true);
+      dv.setUint16(4, 20, true);
+      dv.setUint16(6, 0x0800, true);
+      dv.setUint16(8, 0, true);
+      dv.setUint16(10, time & 0xFFFF, true);
+      dv.setUint16(12, date & 0xFFFF, true);
+      dv.setUint32(14, crc, true);
+      dv.setUint32(18, n, true);
+      dv.setUint32(22, n, true);
+      dv.setUint16(26, name.length, true);
+      dv.setUint16(28, 0, true);
+      lh.set(name, 30);
+      parts.push(lh, data);
+      var ch = new Uint8Array(46 + name.length), dv2 = new DataView(ch.buffer);
+      dv2.setUint32(0, 0x02014b50, true);
+      dv2.setUint16(4, 20, true);
+      dv2.setUint16(6, 20, true);
+      dv2.setUint16(8, 0x0800, true);
+      dv2.setUint16(10, 0, true);
+      dv2.setUint16(12, time & 0xFFFF, true);
+      dv2.setUint16(14, date & 0xFFFF, true);
+      dv2.setUint32(16, crc, true);
+      dv2.setUint32(20, n, true);
+      dv2.setUint32(24, n, true);
+      dv2.setUint16(28, name.length, true);
+      dv2.setUint16(30, 0, true);
+      dv2.setUint16(32, 0, true);
+      dv2.setUint16(34, 0, true);
+      dv2.setUint16(36, 0, true);
+      dv2.setUint32(38, 0, true);
+      dv2.setUint32(42, offset, true);
+      ch.set(name, 46);
+      central.push(ch);
+      offset += lh.length + n;
+    });
+    var cdStart = offset, cdLen = 0;
+    central.forEach(function(c){ cdLen += c.length; });
+    var eocd = new Uint8Array(22), dv3 = new DataView(eocd.buffer);
+    dv3.setUint32(0, 0x06054b50, true);
+    dv3.setUint16(8, files.length, true);
+    dv3.setUint16(10, files.length, true);
+    dv3.setUint32(12, cdLen, true);
+    dv3.setUint32(16, cdStart, true);
+    return new Blob(parts.concat(central, [eocd]),
+      { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  }
+
+  async function docxBody(blocks){
+    var out = [], media = [], imgId = 0;
+    for(var i = 0; i < blocks.length; i++){
+      var b = blocks[i];
+      switch(b.kind){
+        case "title":
+          out.push(wPara(wRun(b.text, { font:"SimHei", eastAsia:"\u9ed1\u4f53", bold:true, sz:34, spacing:56 }),
+            { align:"center", after:170, line:340 }));
+          break;
+        case "meta":
+          out.push(wPara(wRun(b.text, { sz:17 }), { align:"left", after:283, border:"bottom", borderSz:10, line:300 }));
+          break;
+        case "h2":
+          out.push(wPara(wRun(b.text, { font:"SimHei", eastAsia:"\u9ed1\u4f53", bold:true, sz:22 }),
+            { before:283, after:113, border:"bottom", borderSz:5, borderSpace:4, keepNext:true,
+              pageBreak:b.page, line:300 }));
+          break;
+        case "p":
+          out.push(wPara(wRun(b.text, { sz:19 }), { line:360, after:130 }));
+          break;
+        case "table":
+          out.push(wTable(b));
+          out.push(wGap(170));
+          break;
+        case "kpi":
+          out.push(wKpi(b));
+          out.push(wGap(198));
+          break;
+        case "code":
+          b.text.split("\n").forEach(function(ln, k, arr){
+            out.push(wPara(wRun(ln, { font:"Courier New", eastAsia:"\u5b8b\u4f53", sz:17 }),
+              { line:340, after:(k === arr.length - 1 ? 150 : 0) }));
+          });
+          break;
+        case "list":
+          b.items.forEach(function(it){
+            out.push(wPara(wRun("\u00b7 " + it, { sz:18 }), { line:300, indent:284, hanging:284, after:30 }));
+          });
+          out.push(wGap(113));
+          break;
+        case "figure":
+          var im = await figureToPng(b.svg);
+          if(im){
+            imgId++;
+            media.push({ name: "media/image" + imgId + ".png", bytes: im.bytes, px: im });
+            out.push(wImagePara(imgId, im));
+          }
+          out.push(wPara(wRun(b.caption, { sz:16 }), { align:"center", before:85, after:150, line:280 }));
+          break;
+        case "foot":
+          out.push(wPara(wRun(b.text, { sz:16 }), { before:226, border:"bottom", borderSz:4, line:280 }));
+          break;
+        default:
+          out.push(wPara(wRun(b.text || "", { sz:19 }), { line:360, after:130 }));
+      }
+    }
+    return { xml: out.join(""), media: media };
+  }
+  async function buildDocx(){
+    var host = prepare();
+    if(!host) return null;
+    try{
+      var blocks = readBlocks(host);
+      measure(blocks);
+      var built = await docxBody(blocks);
+      var relsImg = built.media.map(function(m, k){
+        return '<Relationship Id="rIdImg' + (k + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"' +
+          ' Target="' + m.name + '"/>';
+      }).join("");
+      var sect = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
+        '<w:pgMar w:top="794" w:right="850" w:bottom="680" w:left="850" w:header="0" w:footer="0" w:gutter="0"/>' +
+        '<w:cols w:space="425"/></w:sectPr>';
+      var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
+        ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
+        ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
+        ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+        "<w:body>" + built.xml + sect + "</w:body></w:document>";
+      var files = [
+        { name: "[Content_Types].xml", data: enc(docxContentTypes(built.media.length)) },
+        { name: "_rels/.rels", data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+            "</Relationships>") },
+        { name: "docProps/core.xml", data: enc(docxCore(new Date())) },
+        { name: "word/document.xml", data: enc(doc) },
+        { name: "word/styles.xml", data: enc(docxStyles()) },
+        { name: "word/_rels/document.xml.rels", data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+            relsImg + "</Relationships>") }
+      ];
+      built.media.forEach(function(m){
+        files.push({ name: "word/" + m.name, data: m.bytes });
+      });
+      return { blob: zipStore(files, new Date()), name: stampName("docx") };
+    } finally {
+      release();
+    }
+  }
+
+  /* ==================== 2) PDF（图片型，A4） ==================== */
+  function paginate(blocks){
+    var pages = [], page = [], y = 0, prevMb = 0;
+    function newPage(){
+      if(page.length) pages.push(page);
+      page = []; y = 0; prevMb = 0;
+    }
+    for(var i = 0; i < blocks.length; i++){
+      var b = blocks[i], h = b.h;
+      if(b.kind === "h2" && b.page){ newPage(); }
+      if(h > PAGE_H_CSS){
+        newPage();
+        var off = 0, rest = h;
+        while(rest > 0.5){
+          var take = Math.min(rest, PAGE_H_CSS);
+          pages.push([{ b:b, i:i, y:0, off:off, h:take }]);
+          off += take; rest -= take;
+        }
+        continue;
+      }
+      var gap = page.length ? Math.max(prevMb, b.mt) : 0;
+      if(b.kind === "h2" && page.length){
+        var nxt = blocks[i + 1];
+        var needNext = nxt ? Math.max(b.mb, nxt.mt) + Math.min(nxt.h, 200) : 0;
+        if(y + gap + h + Math.max(48, needNext) > PAGE_H_CSS){ newPage(); gap = 0; }
+      }
+      if(page.length && y + gap + h > PAGE_H_CSS + 0.3){
+        // 最后一块（通常是页脚说明）：若只差一点，压缩上间距挤进本页，避免只剩一行的尾页
+        if(i === blocks.length - 1 && y + h <= PAGE_H_CSS + 0.3){
+          gap = Math.max(0, PAGE_H_CSS - y - h);
+        }else{
+          newPage(); gap = 0;
+        }
+      }
+      y += gap;
+      page.push({ b:b, i:i, y:y, off:0, h:h });
+      y += h;
+      prevMb = b.mb;
+    }
+    if(page.length) pages.push(page);
+    return pages;
+  }
+  function pdfTextHex(s){
+    var out = "FEFF";
+    for(var i = 0; i < s.length; i++){
+      out += ("000" + s.charCodeAt(i).toString(16)).slice(-4);
+    }
+    return "<" + out.toUpperCase() + ">";
+  }
+  function pdfFromPages(jpegs, title){
+    var N = jpegs.length, parts = [], offsets = [], pos = 0, i;
+    function put(x){
+      var b = (typeof x === "string") ? enc(x) : x;
+      parts.push(b); pos += b.length;
+    }
+    function obj(num, body){
+      offsets[num] = pos;
+      put(num + " 0 obj\n");
+      if(typeof body === "string") put(body);
+      else body.forEach(put);
+      put("\nendobj\n");
+    }
+    put("%PDF-1.4\n");
+    put(new Uint8Array([0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));
+    var kids = [];
+    for(i = 0; i < N; i++) kids.push((3 + i * 3) + " 0 R");
+    obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    obj(2, "<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + N + " >>");
+    var wPt = (PAGE_W_MM * 72 / 25.4).toFixed(2);
+    var hPt = (PAGE_H_MM * 72 / 25.4).toFixed(2);
+    var xPt = (15 * 72 / 25.4).toFixed(2);                      // 左边距 15 mm
+    var yPt = ((297 - 14 - PAGE_H_MM) * 72 / 25.4).toFixed(2);  // 底边距（297−14−271 = 12 mm）
+    for(i = 0; i < N; i++){
+      var pageNum = 3 + i * 3, contNum = pageNum + 1, imgNum = pageNum + 2, j = jpegs[i];
+      obj(pageNum, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] " +
+        "/Resources << /XObject << /Im0 " + imgNum + " 0 R >> >> /Contents " + contNum + " 0 R >>");
+      var stream = "q\n" + wPt + " 0 0 " + hPt + " " + xPt + " " + yPt + " cm\n/Im0 Do\nQ\n";
+      obj(contNum, ["<< /Length " + enc(stream).length + " >>\nstream\n", stream, "\nendstream"]);
+      obj(imgNum, ["<< /Type /XObject /Subtype /Image /Width " + j.w + " /Height " + j.h +
+        " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + j.bytes.length +
+        " >>\nstream\n", j.bytes, "\nendstream"]);
+    }
+    var infoNum = 3 + N * 3;
+    obj(infoNum, "<< /Title " + pdfTextHex(title) + " /Creator " + pdfTextHex("耐火材料温度计算器") +
+      " /Producer " + pdfTextHex("耐火材料温度计算器 (单文件前端导出)") + " >>");
+    var total = infoNum;
+    var xrefPos = pos;
+    var xref = "xref\n0 " + (total + 1) + "\n0000000000 65535 f \n";
+    for(i = 1; i <= total; i++){
+      xref += ("0000000000" + offsets[i]).slice(-10) + " 00000 n \n";
+    }
+    put(xref);
+    put("trailer\n<< /Size " + (total + 1) + " /Root 1 0 R /Info " + infoNum + " 0 R >>\nstartxref\n" +
+      xrefPos + "\n%%EOF\n");
+    return new Blob(parts, { type: "application/pdf" });
+  }
+  function canvasJpeg(cv, q){
+    var url = cv.toDataURL("image/jpeg", q);
+    return { bytes: b64ToBytes(url.substring(url.indexOf(",") + 1)), w: cv.width, h: cv.height };
+  }
+  async function buildPdf(){
+    var host = prepare();
+    if(!host) return null;
+    try{
+      var blocks = readBlocks(host);
+      measure(blocks);
+      var layout = paginate(blocks);
+      var shots = new Array(blocks.length).fill(null);
+      var jpegs = [];
+      for(var p = 0; p < layout.length; p++){
+        var cv = newCanvas(PAGE_W_CSS * PDF_SCALE, PAGE_H_CSS * PDF_SCALE);
+        var ctx = cv.getContext("2d");
+        for(var k = 0; k < layout[p].length; k++){
+          var item = layout[p][k];
+          var shot = shots[item.i];
+          if(!shot) shots[item.i] = shot = await shotBlock(item.b.el, PAGE_W_CSS, item.b.h + 0.6, PDF_SCALE);
+          if(item.off === 0 && item.h >= item.b.h - 0.6){
+            ctx.drawImage(shot, 0, Math.round(item.y * PDF_SCALE));
+          }else{
+            var sy = Math.round(item.off * PDF_SCALE);
+            var sh = Math.min(Math.round(item.h * PDF_SCALE), shot.height - sy);
+            if(sh > 0) ctx.drawImage(shot, 0, sy, shot.width, sh, 0, 0, shot.width, sh);
+          }
+        }
+        jpegs.push(canvasJpeg(cv, 0.93));
+        cv.width = cv.height = 0;                 // 及时释放页面画布内存
+      }
+      if(!jpegs.length) throw new Error("报告内容为空");
+      return { blob: pdfFromPages(jpegs, "耐火材料炉衬温度计算报告"), name: stampName("pdf") };
+    } finally {
+      release();
+    }
+  }
+
+  /* ==================== 3) 界面 ==================== */
+  var busy = false;
+  var menu = $("#exportMenu"), btn = $("#exportBtn"), wrap = $("#expWrap");
+  function menuOpen(open){
+    if(!menu || !btn) return;
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  function setBusy(on){
+    busy = on;
+    if(menu) $$("button", menu).forEach(function(x){ x.disabled = on; });
+    if(btn) btn.disabled = on;
+  }
+  async function runExport(kind){
+    if(busy) return;
+    menuOpen(false);
+    if(kind === "print"){ if(window.RPT) window.RPT.print(); return; }
+    setBusy(true);
+    toast(kind === "docx" ? "正在生成 Word 文档…" : "正在生成 PDF（约需 1~3 秒）…");
+    try{
+      var art = kind === "docx" ? await buildDocx() : await buildPdf();
+      if(art){
+        saveBlob(art.blob, art.name);
+        toast(kind === "docx" ? "Word 文档已下载：" + art.name : "PDF 已下载：" + art.name);
+      }
+    }catch(err){
+      console.error("[export]", err);
+      toast("导出失败（" + ((err && err.message) || err) + "），已改用浏览器打印", true);
+      if(window.RPT) window.RPT.print();
+    }finally{
+      setBusy(false);
+      CSS_CACHE = null;
+    }
+  }
+  if(btn) btn.addEventListener("click", function(e){
+    e.stopPropagation();
+    menuOpen(!!(menu && menu.hidden));
+  });
+  if(menu) menu.addEventListener("click", function(e){
+    var t = e.target.closest("[data-export]");
+    if(t && !t.disabled) runExport(t.getAttribute("data-export"));
+  });
+  document.addEventListener("click", function(e){
+    if(wrap && !wrap.contains(e.target)) menuOpen(false);
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape") menuOpen(false);
+  });
+
+  /* 供自动化测试/二次开发使用 */
+  window.RPTExport = { docx: buildDocx, pdf: buildPdf, blocks: readBlocks };
+})();
+</script>
+
 <script>
 /* ==================== 版本与自动更新 ====================
    发布新版本时：
@@ -2312,8 +3158,8 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.0.3";
-  var BUILD   = "2026-10-19";
+  var VERSION = "1.0.4";
+  var BUILD   = "2026-10-23";
 
   /* ★ 更新清单地址
      · MANIFEST_REL：托管在 GitHub Pages 等服务器上时用（相对路径、同源，最省事）
