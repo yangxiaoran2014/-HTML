@@ -251,6 +251,16 @@
   #kpis .kpi{border:1px solid var(--line); border-radius:10px; background:#fafcff; padding:9px 11px}
   #kpis .kpi .v{font-size:15px}
 
+  /* 沿厚度温度表 */
+  #depthTable .mark td{background:#fff6e5; color:#a1590a; font-weight:600}
+  #depthTable .iface td{background:#f7fafd; color:var(--muted)}
+  #depthTable .name{text-align:left}
+  .isosum{
+    margin:0 0 8px; font-size:12.5px; line-height:1.6; color:var(--txt);
+    background:var(--info-bg); border:1px solid var(--info-line); border-radius:9px; padding:8px 11px;
+  }
+  .isosum.warn{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
+
   footer{max-width:1560px; margin:0 auto; padding:0 20px 34px; color:var(--dim); font-size:11.5px; line-height:1.6}
   .foot-note{margin-bottom:5px}
   .foot-meta{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--dim)}
@@ -520,6 +530,36 @@
               <tbody id="resBody"></tbody>
             </table>
           </div>
+        </section>
+
+        <section class="card">
+          <h2>沿厚度温度表 <small>标出目标温度的深度</small></h2>
+          <div class="row-actions" style="margin:0 0 9px">
+            <label class="fld inlineRow" style="flex:1">
+              <span class="lbl">目标温度</span>
+              <span class="inp"><input type="number" id="tMark" value="660" step="10"><i>°C</i></span>
+            </label>
+            <label class="fld inlineRow" style="flex:1">
+              <span class="lbl">行距</span>
+              <span class="inp"><select id="tStep">
+                <option value="5">5 mm</option>
+                <option value="10">10 mm</option>
+                <option value="20" selected>20 mm</option>
+                <option value="25">25 mm</option>
+                <option value="50">50 mm</option>
+              </select></span>
+            </label>
+          </div>
+          <div class="isosum" id="tMarkSum">—</div>
+          <div class="tablewrap">
+            <table id="depthTable">
+              <thead>
+                <tr><th>距内表面 (mm)</th><th>温度 (°C)</th><th>所在层</th><th>说明</th></tr>
+              </thead>
+              <tbody id="depthBody"></tbody>
+            </table>
+          </div>
+          <div class="hint">稳态工况下，层内 λ 按该层平均温度取定值，故平面壁温度随厚度线性变化、圆筒壁随 ln(r/r₁) 变化；表格数值与上方逐层表完全自洽。行距越小表越长（5 mm 最细）；改「目标温度」可标出任意等温线位置（660 °C 常用于判断某些耐火材料是否在工作温度内）。</div>
         </section>
 
         <section class="card" id="refCard">
@@ -1016,6 +1056,7 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       $("#tInSurf").textContent = "—";
       $("#thkVal").textContent = "—";
       $("#resBody").innerHTML = "";
+      renderDepthTable(null);
       return;
     }
     lastResult = r;
@@ -1065,6 +1106,7 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
         "<td>" + fmt(r.tIn - r.tInnerSurf, 1) + "</td></tr>" + rows;
     }
     $("#resBody").innerHTML = rows;
+    renderDepthTable(r);
 
 
     // 提示信息
@@ -1103,6 +1145,120 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
 
   function compute(){ render(); notify(); }
 
+  Array.prototype.forEach.call([$("#tMark"), $("#tStep")], function(el){
+    if(!el) return;
+    el.addEventListener("change", compute);
+    el.addEventListener("input", compute);
+  });
+
+  /* ---------------- 沿厚度温度表（标出目标温度等温线） ---------------- */
+  function layerAtDepth(r, xmm){
+    var xs = 0;
+    for(var i = 0; i < r.layers.length; i++){
+      if(xmm <= xs + r.layers[i].d + 1e-9) return i;
+      xs += r.layers[i].d;
+    }
+    return r.layers.length - 1;
+  }
+  // 距内表面 xmm 处的温度（层内 λ 为常数：平面线性，圆筒按 ln r）
+  function tempAtDepth(r, xmm){
+    var xs = 0;
+    for(var i = 0; i < r.layers.length; i++){
+      var d = r.layers[i].d;
+      if(xmm <= xs + d + 1e-9 || i === r.layers.length - 1){
+        var s = Math.max(0, Math.min(d, xmm - xs));
+        if(r.geo === "cyl"){
+          var r1mm = r.r1 * 1000, ri = r1mm + xs, rr = ri + s;
+          return r.surf[i] - (r.q / (2 * Math.PI * r.lam[i])) * Math.log(rr / ri);
+        }
+        return r.surf[i] - r.q * (s / 1000) / r.lam[i];
+      }
+      xs += d;
+    }
+    return r.surf[r.surf.length - 1];
+  }
+  // 温度 T0 所在深度；不在范围内返回 null
+  function isothermDepth(r, T0){
+    if(!r || !r.ok || !Number.isFinite(T0)) return null;
+    if(!Number.isFinite(r.q) || Math.abs(r.q) < 1e-12){
+      // 等温（q≈0）：整层温度都等于内表面温度
+      if(Math.abs(r.surf[0] - T0) < 1e-6) return { x: 0, layer: 0, start: 0, d: r.layers[0].d };
+      return null;
+    }
+    var xs = 0;
+    for(var i = 0; i < r.layers.length; i++){
+      var L = r.layers[i], ta = r.surf[i], tb = r.surf[i + 1];
+      var lo = Math.min(ta, tb), hi = Math.max(ta, tb);
+      if(T0 <= hi + 1e-9 && T0 >= lo - 1e-9){
+        var s;
+        if(r.geo === "cyl"){
+          var r1mm = r.r1 * 1000, ri = r1mm + xs;
+          s = ri * (Math.exp((ta - T0) * 2 * Math.PI * r.lam[i] / r.q) - 1);
+        } else {
+          s = (ta - T0) * r.lam[i] * 1000 / r.q;
+        }
+        if(!Number.isFinite(s)) s = 0;
+        s = Math.max(0, Math.min(L.d, s));
+        return { x: xs + s, layer: i, start: xs, d: L.d };
+      }
+      xs += L.d;
+    }
+    return null;
+  }
+  function renderDepthTable(r){
+    var body = $("#depthBody"), sum = $("#tMarkSum");
+    if(!body || !sum) return;
+    if(!r || !r.ok){
+      body.innerHTML = "";
+      sum.className = "isosum";
+      sum.textContent = "—";
+      return;
+    }
+    var tMark = parseFloat($("#tMark").value);
+    if(!Number.isFinite(tMark)) tMark = 660;
+    var step = parseFloat($("#tStep").value);
+    if(!Number.isFinite(step) || step <= 0) step = 20;
+    var total = r.totalThk, L = r.layers;
+    var ifs = [0];
+    L.forEach(function(l){ ifs.push(ifs[ifs.length - 1] + l.d); });
+
+    var hit = isothermDepth(r, tMark);
+    var xsSet = [0];
+    for(var x = step; x < total - 1e-6; x += step) xsSet.push(+x.toFixed(3));
+    xsSet.push(+total.toFixed(3));
+    ifs.forEach(function(v){ if(v > 1e-6 && v < total - 1e-6) xsSet.push(+v.toFixed(3)); });
+    if(hit) xsSet.push(+hit.x.toFixed(3));
+    xsSet = xsSet.filter(function(v, i, a){ return a.indexOf(v) === i; }).sort(function(a, b){ return a - b; });
+
+    var rows = "";
+    xsSet.forEach(function(dep){
+      var isMark = hit && Math.abs(dep - hit.x) < 0.05;
+      var isIf = ifs.some(function(v){ return Math.abs(v - dep) < 1e-6 && v > 1e-6 && v < total - 1e-6; });
+      var li = layerAtDepth(r, dep);
+      var note = isMark ? ("★ " + fmt(tMark, 0) + " °C 等温线")
+                : (isIf ? "层界面" : (dep < 1e-6 ? "内表面" : (Math.abs(dep - total) < 1e-6 ? "外表面" : "")));
+      var cls = isMark ? "mark" : (isIf ? "iface" : "");
+      rows += '<tr class="' + cls + '">' +
+        "<td>" + fmt(dep, 1) + "</td>" +
+        "<td>" + fmt(tempAtDepth(r, dep), 1) + "</td>" +
+        '<td class="name">' + esc(L[li] ? L[li].name : "—") + "</td>" +
+        '<td class="name">' + note + "</td></tr>";
+    });
+    body.innerHTML = rows;
+
+    if(hit){
+      var pct = hit.d > 0 ? (hit.x - hit.start) / hit.d * 100 : 0;
+      sum.className = "isosum";
+      sum.innerHTML = "<b>" + fmt(tMark, 0) + " °C</b> 等温线位于距内表面 <b>" + fmt(hit.x, 1) + " mm</b>（" +
+        esc(L[hit.layer].name) + "，占该层厚度 " + fmt(pct, 1) + "%）；该深度以里温度更高、以外更低。" +
+        "　以内厚度 <b>" + fmt(hit.x, 1) + " mm</b>，以外 <b>" + fmt(total - hit.x, 1) + " mm</b>。";
+    } else {
+      sum.className = "isosum warn";
+      sum.innerHTML = "<b>" + fmt(tMark, 0) + " °C</b> 不在本工况温度范围内（内表面 " + fmt(r.tInnerSurf, 1) +
+        " °C、外表面 " + fmt(r.tOut, 1) + " °C），没有对应的等温线。";
+    }
+  }
+
   /* ---------------- 对外同步接口（供选项卡 ② 的瞬态降温计算使用） ---------------- */
   var syncListeners = [];
   function notify(){
@@ -1119,6 +1275,14 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     subscribe: function(fn){
       syncListeners.push(fn);
       try{ fn(lastResult); }catch(err){}
+    },
+    // 距内表面 xmm 处的温度
+    tempAt: function(xmm){
+      return (lastResult && lastResult.ok) ? tempAtDepth(lastResult, xmm) : null;
+    },
+    // 温度 T0 所在深度 {x, layer, start, d}；不在范围内为 null
+    isotherm: function(T0){
+      return (lastResult && lastResult.ok) ? isothermDepth(lastResult, T0) : null;
     }
   };
 
@@ -2604,6 +2768,26 @@ function solveTransient(cfg){
               : "低于 50 °C，接触安全且满足 GB/T 3486 限值要求。");
     H.push('<p class="rpt-p">结论：外表面温度 ' + fmt(r.tOut, 1) + ' °C，' + judge + '</p>');
 
+    /* 目标温度等温线位置（页面「沿厚度温度表」里的目标温度，默认 660 °C） */
+    var markEl = document.querySelector("#tMark");
+    var tMark = markEl ? parseFloat(markEl.value) : 660;
+    if(!Number.isFinite(tMark)) tMark = 660;
+    var iso = (S && S.isotherm) ? S.isotherm(tMark) : null;
+    if(iso){
+      var isoL = r.layers[iso.layer];
+      H.push(pairTable([
+        [fmt(tMark, 0) + " °C 等温线位置", "距内表面 " + fmt(iso.x, 1) + " mm"],
+        ["所在层（范围）", isoL.name + "（" + fmt(iso.start, 0) + " ~ " + fmt(iso.start + iso.d, 0) + " mm）"],
+        ["该层内占比", fmt(iso.d > 0 ? (iso.x - iso.start) / iso.d * 100 : 0, 1) + " %"],
+        [fmt(tMark, 0) + " °C 以内 / 以外厚度", fmt(iso.x, 1) + " mm / " + fmt(r.totalThk - iso.x, 1) + " mm"]
+      ]));
+    } else {
+      H.push(pairTable([
+        [fmt(tMark, 0) + " °C 等温线", "本工况温度范围（" + fmt(r.tOut, 1) + " ~ " + fmt(r.tInnerSurf, 1) +
+          " °C）未包含 " + fmt(tMark, 0) + " °C，无对应深度"]
+      ]));
+    }
+
     /* 四、降温曲线 */
     var svg = document.querySelector("#kChart");
     var kpiNodes = document.querySelectorAll("#kpis .kpi");
@@ -3490,7 +3674,7 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.1.1";
+  var VERSION = "1.2.0";
   var BUILD   = "2026-10-24";
 
   /* ★ 更新清单地址
