@@ -211,13 +211,13 @@
 
   .chartwrap{position:relative; width:100%}
   .chartwrap svg{width:100%; height:auto; display:block; touch-action:none}
-  #tip, #tipL{
+  #tip, #tipL, #tipD{
     position:absolute; pointer-events:none; z-index:5; background:rgba(12,32,60,.95); color:#fff;
     border-radius:9px; padding:7px 10px; font-size:12px; line-height:1.5; white-space:nowrap;
     box-shadow:0 8px 20px rgba(9,25,48,.3); opacity:0; transition:opacity .1s;
   }
-  #tip .tt, #tipL .tt{font-size:10.5px; color:#9fc0e8; letter-spacing:.3px}
-  #tip b, #tipL b{font-size:13px}
+  #tip .tt, #tipL .tt, #tipD .tt{font-size:10.5px; color:#9fc0e8; letter-spacing:.3px}
+  #tip b, #tipL b, #tipD b{font-size:13px}
   .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:10px}
   .legend .lg{cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:5px}
   .legend .lg i{width:14px; height:3px; border-radius:2px; display:inline-block}
@@ -699,18 +699,18 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
         </section>
 
         <section class="card">
-          <h2>层温曲线<small>各层平均温度随时间变化</small></h2>
-          <div class="chartwrap" id="layerWrap"><div id="tipL"></div></div>
-          <div class="legend" id="lLegend"></div>
+          <h2>温度分布曲线<small>温度—厚度 · 不同停炉时刻</small></h2>
+          <div class="chartwrap" id="depthWrap"><div id="tipD"></div></div>
+          <div class="legend" id="dLegend"></div>
           <div class="qbox" style="margin-top:10px">
-            <div class="t"><span class="dot g"></span>按时间 → 查各层平均温度</div>
+            <div class="t"><span class="dot g"></span>按厚度 → 查该处温度</div>
             <div class="qrow">
-              <span class="inp"><input type="number" id="qLayerTime" step="0.1" placeholder="例如 4"></span>
-              <span class="unit" id="lUnitTag">h</span>
+              <span class="inp"><input type="number" id="qDepth" step="1" placeholder="例如 120"></span>
+              <span class="unit">mm</span>
             </div>
-            <div class="qres" id="resLayer">输入时间（如第 4 小时），查看该时刻每一层的平均温度。</div>
+            <div class="qres" id="resDepth">输入厚度（如 120 mm），查看该处停炉后各时刻的温度。</div>
           </div>
-          <div class="hint">层温 = 该层沿厚度（圆筒沿半径）的平均温度，比外表面滞后；鼠标移到曲线上可看该时刻各层温度，点击曲线可把时间填入查询框。</div>
+          <div class="hint">横轴为距内表面的厚度：左端内表面、右端外表面；每条曲线对应一个停炉时刻。鼠标悬停看该厚度处各时刻温度，点击曲线可把厚度填入查询框。</div>
         </section>
 
         
@@ -1309,7 +1309,8 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     var ta = num("#gTa");
     envT = (pts.length && Number.isFinite(ta)) ? ta : NaN;
     series = pts.length ? [{name:"实测数据", color:PALETTE[0], pts:pts, visible:true}] : [];
-    layerSeries = [];
+    profileData = null;
+    ifaceMM = [];
     lastInfo = pts.length ? ("手动数据 " + pts.length + " 个点") : "";
   }
 
@@ -1496,28 +1497,6 @@ function solveTransient(cfg){
       return out;
     }
 
-    /* 各层平均温度：层内节点间按线性插值，沿厚度精确积分后取平均值
-       （圆筒同样按 (r−r₁) 的厚度权重，与稳态报告里的“平均温度”口径一致） */
-    function layerMeans(){
-      var out = [], k;
-      for(k = 0; k < layers.length; k++){
-        var x0 = xIf[k], x1 = xIf[k + 1], acc = 0, wsum = 0;
-        for(var j = 0; j < N - 1; j++){
-          var a0 = xs[j] - (plane ? 0 : r1), b0 = xs[j + 1] - (plane ? 0 : r1);
-          var s0 = Math.max(a0, x0), e0 = Math.min(b0, x1);
-          if(e0 - s0 <= 1e-12) continue;
-          var span = b0 - a0;
-          var T0 = T[j], dT = T[j + 1] - T[j];
-          var Ta = T0 + dT * (span > 0 ? (s0 - a0) / span : 0);
-          var Tb = T0 + dT * (span > 0 ? (e0 - a0) / span : 1);
-          acc += 0.5 * (Ta + Tb) * (e0 - s0);
-          wsum += (e0 - s0);
-        }
-        out.push(wsum > 0 ? acc / wsum : T[0]);
-      }
-      return out;
-    }
-
     /* ---- 时间推进：几何递增步长 + 命中输出时刻 ---- */
     var tEnd = cfg.tEnd, nOut = cfg.nOut, dtOut = tEnd / (nOut - 1);
     updateG(T);
@@ -1532,7 +1511,14 @@ function solveTransient(cfg){
     var dtMax = Math.max(dt0, tEnd / 50);
     var grow = 1.06;
 
-    var times = [0], samples = [sample()], samplesL = [layerMeans()];
+    /* 温度—厚度分布快照：在输出时刻中均匀取 SNAP 个 */
+    var SNAP = 7, snaps = [], snapIdx = [];
+    for(var si = 0; si < SNAP; si++) snapIdx.push(Math.round(si * (nOut - 1) / (SNAP - 1)));
+    function captureSnap(tNow, idx){
+      if(snapIdx.indexOf(idx) >= 0) snaps.push({ t: tNow, T: new Float32Array(T) });
+    }
+    var times = [0], samples = [sample()];
+    captureSnap(0, 0);
     var t = 0, nextOut = 1, dt = dt0, steps = 0, capped = false, dtLast = dt;
     while(nextOut < nOut && t < tEnd - 1e-12){
       var tTarget = nextOut * dtOut;
@@ -1546,7 +1532,7 @@ function solveTransient(cfg){
       if(t >= tTarget - 1e-9){
         times.push(tTarget);
         samples.push(sample());
-        samplesL.push(layerMeans());
+        captureSnap(tTarget, times.length - 1);
         nextOut++;
       }
       if(steps >= 40000){ capped = true; break; }
@@ -1555,7 +1541,6 @@ function solveTransient(cfg){
     while(times.length < nOut){
       times.push(+(times.length * dtOut).toFixed(9));
       samples.push(samples[samples.length - 1].slice());
-      samplesL.push(samplesL[samplesL.length - 1].slice());
     }
 
     var mm = function(x){ return Math.round(x * 1000); };
@@ -1571,15 +1556,21 @@ function solveTransient(cfg){
       outSeries.push({name:nm, pts:pts});
     }
 
-    var outLayers = layers.map(function(L, idx){
-      var lpts = [];
-      for(var q4 = 0; q4 < times.length; q4++){ lpts.push({t:times[q4], T:samplesL[q4][idx]}); }
-      return {name:L.name, pts:lpts};
+    /* 温度—厚度分布：节点抽稀到 ≤ 301 个，避免 SVG 路径过长 */
+    var keep = [], strideX = Math.max(1, Math.ceil(N / 300));
+    for(var jk = 0; jk < N; jk += strideX) keep.push(jk);
+    if(keep[keep.length - 1] !== N - 1) keep.push(N - 1);
+    var xmmOut = keep.map(function(j){
+      return +(((xs[j] - (plane ? 0 : r1)) * 1000).toFixed(3));
     });
+    var snapOut = snaps.map(function(sp){
+      return { t: sp.t, T: keep.map(function(j){ return sp.T[j]; }) };
+    });
+    if(!snapOut.length) snapOut.push({ t: 0, T: keep.map(function(j){ return T[j]; }) });
 
     return {
       series: outSeries,
-      layers: outLayers,
+      profile: { x: xmmOut, snaps: snapOut },
       info: {
         N:N, dx:dx, steps:steps, tEnd:tEnd, capped:capped, dt0:dt0, dtLast:dtLast,
         gridCapped:gridCapped, qInit:qInit, initInner:initInner, initOuter:initOuter,
@@ -1598,7 +1589,8 @@ function solveTransient(cfg){
     el.innerHTML = text;
   }
   function buildSync(){
-    layerSeries = [];
+    profileData = null;
+    ifaceMM = [];
     var S = window.SteadySolver;
     var r = S ? S.result() : null;
     if(!r || !r.ok){
@@ -1654,14 +1646,22 @@ function solveTransient(cfg){
         pts: s.pts.map(function(p){ return {t: p.t / fac, T: p.T}; })
       };
     });
-    layerSeries = (res.layers || []).map(function(s, i){
-      return {
-        name: s.name,
-        color: PALETTE[(i + 1) % PALETTE.length],
-        visible: true,
-        pts: s.pts.map(function(p){ return {t: p.t / fac, T: p.T}; })
+    var rl = r.layers || [];
+    ifaceMM = [0];
+    rl.forEach(function(L){ ifaceMM.push(ifaceMM[ifaceMM.length - 1] + L.d); });
+    if(res.profile && res.profile.snaps && res.profile.snaps.length){
+      profileData = {
+        x: res.profile.x,
+        snaps: res.profile.snaps.map(function(sp, i){
+          return {
+            t: sp.t / fac,
+            T: sp.T,
+            color: SNAP_COLORS[i % SNAP_COLORS.length],
+            visible: true
+          };
+        })
       };
-    });
+    }
     envT = r.tAir;
     badLines = 0;
     lastInfo = "初始温度场：内表面 " + fmt(res.info.initInner, 1) + " °C → 外表面 " + fmt(res.info.initOuter, 1) +
@@ -1925,110 +1925,175 @@ function solveTransient(cfg){
     });
   }
 
-  /* ---------------- 层温曲线（各层平均温度） ---------------- */
-  var layerSeries = [];                       // [{name, color, pts:[{t,T}], visible}]
-  var lwrap = $("#layerWrap"), ltip = $("#tipL");
-  var LH = 366, LmT = 26, LmB = 56;
-  var lpH = LH - LmT - LmB;
-  var lview = null;
+  /* ---------------- 温度分布曲线（温度—厚度） ---------------- */
+  var SNAP_COLORS = ["#c0392b", "#d97706", "#b8a517", "#0e9488", "#1d5fd0", "#5b52b8", "#8a4b9e"];
+  var profileData = null;                 // {x:[mm], snaps:[{t,T:[],color,visible}]}
+  var ifaceMM = [];                       // 层界面位置（mm，含 0 与总厚）
+  var dwrap = $("#depthWrap"), dtip = $("#tipD");
+  var DH = 384, DmT = 30, DmB = 64, DpH = DH - DmT - DmB;
+  var dview = null;
 
-  function lvisible(){ return layerSeries.filter(function(s){ return s.visible; }); }
-  function lX(t){ return mL + (t - lview.tmin) / (lview.tmax - lview.tmin) * pw; }
-  function lY(T){ return LmT + (1 - (T - lview.Tmin) / (lview.Tmax - lview.Tmin)) * lpH; }
-  function lInvX(x){ return lview.tmin + (x - mL) / pw * (lview.tmax - lview.tmin); }
+  function dvisibleSnaps(){
+    return profileData ? profileData.snaps.filter(function(sp){ return sp.visible !== false; }) : [];
+  }
+  function dtotal(){ return profileData && profileData.x.length ? profileData.x[profileData.x.length - 1] : 0; }
+  function dX(xmm){ return mL + (xmm - dview.xmin) / (dview.xmax - dview.xmin) * pw; }
+  function dY(T){ return DmT + (1 - (T - dview.Tmin) / (dview.Tmax - dview.Tmin)) * DpH; }
+  function dInvX(px){ return dview.xmin + (px - mL) / pw * (dview.xmax - dview.xmin); }
 
-  function renderLLegend(){
-    var el = $("#lLegend");
+  /* 沿厚度线性插值取该处的温度 */
+  function T_atX(xarr, Tarr, x){
+    var n = xarr.length;
+    if(!n) return null;
+    if(x <= xarr[0]) return Tarr[0];
+    if(x >= xarr[n - 1]) return Tarr[n - 1];
+    var lo = 0, hi = n - 1;
+    while(hi - lo > 1){
+      var mid = (lo + hi) >> 1;
+      if(xarr[mid] <= x) lo = mid; else hi = mid;
+    }
+    var d = xarr[hi] - xarr[lo];
+    var f = d > 0 ? (x - xarr[lo]) / d : 0;
+    return Tarr[lo] + f * (Tarr[hi] - Tarr[lo]);
+  }
+  function snapLabel(sp){
+    var t = sp.t;
+    var v = (Math.abs(t - Math.round(t)) < 1e-6) ? String(Math.round(t)) : fmt(t, 2);
+    return v + " " + unitText();
+  }
+
+  function renderDLegend(){
+    var el = $("#dLegend");
     if(!el) return;
-    if(!layerSeries.length){
+    if(!profileData || !profileData.snaps.length){
       el.innerHTML = '<span style="color:#8697ab">暂无分层数据</span>';
       return;
     }
-    el.innerHTML = layerSeries.map(function(s, i){
-      return '<span class="lg' + (s.visible ? "" : " off") + '" data-i="' + i + '">' +
-             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>';
+    el.innerHTML = profileData.snaps.map(function(sp, i){
+      return '<span class="lg' + (sp.visible === false ? " off" : "") + '" data-i="' + i + '">' +
+             '<i style="background:' + sp.color + '"></i>停炉后 ' + esc(snapLabel(sp)) + '</span>';
     }).join("");
     Array.prototype.forEach.call(el.querySelectorAll(".lg"), function(node){
       node.addEventListener("click", function(){
         var i = +node.getAttribute("data-i");
-        layerSeries[i].visible = !layerSeries[i].visible;
-        drawLayer();
-        runLayerQuery();
+        profileData.snaps[i].visible = (profileData.snaps[i].visible === false);
+        drawDepth();
+        runDepthQuery();
       });
     });
   }
 
-  function drawLayer(){
-    if(!lwrap) return;
-    var vis = lvisible();
+  function drawDepth(){
+    if(!dwrap) return;
+    var vis = dvisibleSnaps();
     if(!vis.length){
-      lwrap.innerHTML = '<div id="tipL"></div><div class="hint" style="padding:46px 10px;text-align:center">' +
+      dwrap.innerHTML = '<div id="tipD"></div><div class="hint" style="padding:46px 10px;text-align:center">' +
         (currentMode() === "sync"
-          ? "选项卡 ① 参数有效后，这里会显示「各层平均温度」随时间的降温曲线"
-          : "手动输入模式下没有分层数据；把数据来源切回「由稳态计算同步」即可看到") +
-        '</div>';
-      ltip = $("#tipL");
-      renderLLegend();
+          ? "选项卡 ① 参数有效后，这里会显示温度沿厚度（内表面 → 外表面）的分布曲线"
+          : "手动输入模式下没有分层数据；把数据来源切回「由稳态计算同步」即可") + '</div>';
+      dtip = $("#tipD");
+      renderDLegend();
       return;
     }
-    var tmin = Infinity, tmax = -Infinity, Tmin = Infinity, Tmax = -Infinity;
-    vis.forEach(function(sr){
-      sr.pts.forEach(function(pt){
-        if(pt.t < tmin) tmin = pt.t;
-        if(pt.t > tmax) tmax = pt.t;
-        if(pt.T < Tmin) Tmin = pt.T;
-        if(pt.T > Tmax) Tmax = pt.T;
-      });
+    var xmax = dtotal();
+    if(!(xmax > 0)) xmax = 1;
+    var Tmin = Infinity, Tmax = -Infinity;
+    vis.forEach(function(sp){
+      for(var i = 0; i < sp.T.length; i++){
+        if(sp.T[i] < Tmin) Tmin = sp.T[i];
+        if(sp.T[i] > Tmax) Tmax = sp.T[i];
+      }
     });
-    if(!(tmax > tmin)){ tmax = tmin + 1; }
-    if(!(Tmax > Tmin)){ Tmax = Tmin + 1; }
-    var padT = (tmax - tmin) * 0.02, padY = (Tmax - Tmin) * 0.10;
-    tmin = Math.max(0, tmin - padT);              // 时间轴仍以 0 为起点
-    tmax += padT; Tmin -= padY; Tmax += padY;
-    lview = { tmin:tmin, tmax:tmax, Tmin:Tmin, Tmax:Tmax };
+    if(!(Tmax > Tmin)) Tmax = Tmin + 1;
+    var padY = (Tmax - Tmin) * 0.08;
+    Tmin -= padY; Tmax += padY;
+    dview = { xmin: 0, xmax: xmax, Tmin: Tmin, Tmax: Tmax };
 
-    var u = unitText();
     var s = [];
-    s.push('<svg id="lChart" viewBox="0 0 ' + W + ' ' + LH + '" xmlns="' + SVGNS + '">');
-    s.push('<rect x="0" y="0" width="' + W + '" height="' + LH + '" fill="#fff"/>');
-    ticks(Tmin, Tmax, 5).forEach(function(T){
-      var y = lY(T);
+    s.push('<svg id="dChart" viewBox="0 0 ' + W + ' ' + DH + '" xmlns="' + SVGNS + '">');
+    s.push('<rect x="0" y="0" width="' + W + '" height="' + DH + '" fill="#fff"/>');
+    ticks(Tmin, Tmax, 6).forEach(function(T){
+      var y = dY(T);
       s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#edf2f9"/>');
       s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#8697ab">' +
              (Math.abs(T) >= 100 ? T.toFixed(0) : T.toFixed(1)) + '</text>');
     });
-    ticks(tmin, tmax, 7).forEach(function(t){
-      var x = lX(t);
-      s.push('<line x1="' + x.toFixed(1) + '" y1="' + LmT + '" x2="' + x.toFixed(1) + '" y2="' + (LmT + lpH) + '" stroke="#f2f6fc"/>');
-      s.push('<text x="' + x.toFixed(1) + '" y="' + (LmT + lpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
-             (Math.abs(t) >= 100 ? t.toFixed(0) : t.toFixed(1)) + '</text>');
+    // 层界面参考线
+    ifaceMM.forEach(function(x0, idx){
+      if(idx === 0 || idx === ifaceMM.length - 1) return;
+      if(!(x0 > 0 && x0 < xmax)) return;
+      var x = dX(x0);
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + DmT + '" x2="' + x.toFixed(1) + '" y2="' + (DmT + DpH) +
+             '" stroke="#dfe7f2" stroke-dasharray="4 4"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (DmT - 9) + '" text-anchor="middle" font-size="10.5" fill="#a6b4c6">' +
+             fmt(x0, 0) + ' mm</text>');
     });
-    s.push('<line x1="' + mL + '" y1="' + (LmT + lpH) + '" x2="' + (mL + pw) + '" y2="' + (LmT + lpH) + '" stroke="#c9d8ea"/>');
-    s.push('<line x1="' + mL + '" y1="' + LmT + '" x2="' + mL + '" y2="' + (LmT + lpH) + '" stroke="#c9d8ea"/>');
-    s.push('<text x="' + (mL + pw / 2) + '" y="' + (LH - 14) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">时间 (' + esc(u) + ')</text>');
-    s.push('<text x="17" y="' + (LmT + lpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' + (LmT + lpH / 2) + ')">层平均温度 (°C)</text>');
+    ticks(0, xmax, 7).forEach(function(xm){
+      var x = dX(xm);
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + DmT + '" x2="' + x.toFixed(1) + '" y2="' + (DmT + DpH) + '" stroke="#f2f6fc"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (DmT + DpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
+             fmt(xm, 0) + '</text>');
+    });
+    s.push('<line x1="' + mL + '" y1="' + (DmT + DpH) + '" x2="' + (mL + pw) + '" y2="' + (DmT + DpH) + '" stroke="#c9d8ea"/>');
+    s.push('<line x1="' + mL + '" y1="' + DmT + '" x2="' + mL + '" y2="' + (DmT + DpH) + '" stroke="#c9d8ea"/>');
+    s.push('<text x="' + (mL + pw / 2) + '" y="' + (DH - 15) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">距内表面厚度 (mm)</text>');
+    s.push('<text x="17" y="' + (DmT + DpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' +
+           (DmT + DpH / 2) + ')">温度 (°C)</text>');
+    s.push('<text x="' + (mL + 5) + '" y="' + (DmT + DpH - 7) + '" font-size="10.5" fill="#a6b4c6">内表面</text>');
+    s.push('<text x="' + (mL + pw - 5) + '" y="' + (DmT + DpH - 7) + '" text-anchor="end" font-size="10.5" fill="#a6b4c6">外表面</text>');
 
-    vis.forEach(function(sr){
-      var d = sr.pts.map(function(pt, i){
-        return (i ? "L" : "M") + lX(pt.t).toFixed(1) + " " + lY(pt.T).toFixed(1);
-      }).join(" ");
-      s.push('<path d="' + d + '" fill="none" stroke="' + sr.color + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>');
+    vis.forEach(function(sp){
+      var d = "", n = profileData.x.length;
+      for(var i = 0; i < n; i++){
+        d += (i ? "L" : "M") + dX(profileData.x[i]).toFixed(1) + " " + dY(sp.T[i]).toFixed(1);
+      }
+      s.push('<path d="' + d + '" fill="none" stroke="' + sp.color + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>');
     });
 
-    s.push('<g id="hovGL" data-hov="1" style="display:none">' +
-      '<line id="lHovV" x1="0" y1="' + LmT + '" x2="0" y2="' + (LmT + lpH) + '" stroke="#5b7089" stroke-dasharray="3 3"/>' +
-      '<g id="lHovDots"></g></g>');
-    s.push('<rect id="lHit" x="' + mL + '" y="' + LmT + '" width="' + pw + '" height="' + lpH + '" fill="transparent" style="cursor:crosshair"/>');
+    s.push('<g id="hovGD" data-hov="1" style="display:none">' +
+      '<line id="dHovV" x1="0" y1="' + DmT + '" x2="0" y2="' + (DmT + DpH) + '" stroke="#5b7089" stroke-dasharray="3 3"/>' +
+      '<g id="dHovDots"></g></g>');
+    s.push('<rect id="dHit" x="' + mL + '" y="' + DmT + '" width="' + pw + '" height="' + DpH + '" fill="transparent" style="cursor:crosshair"/>');
     s.push('</svg>');
 
-    lwrap.innerHTML = '<div id="tipL"></div>' + s.join("");
-    ltip = $("#tipL");
-    renderLLegend();
-    bindLayer();
+    dwrap.innerHTML = '<div id="tipD"></div>' + s.join("");
+    dtip = $("#tipD");
+    renderDLegend();
+    bindDepth();
   }
 
-  function bindLayer(){
-    var svg = $("#lChart");
+  function paintHover(xmm, evt){
+    var vis = dvisibleSnaps();
+    if(!vis.length || !dview) return;
+    var x = dX(xmm);
+    var g = $("#hovGD"), v = $("#dHovV"), dots = $("#dHovDots");
+    if(!g) return;
+    g.style.display = "";
+    v.setAttribute("x1", x.toFixed(1));
+    v.setAttribute("x2", x.toFixed(1));
+    var rows = "";
+    dots.innerHTML = vis.map(function(sp){
+      var T = T_atX(profileData.x, sp.T, xmm);
+      rows += '<div style="margin-top:2px"><span class="swatch" style="background:' + sp.color + '"></span>' +
+              esc("停炉后 " + snapLabel(sp)) + ' <b>' + fmt(T, 1) + '</b> °C</div>';
+      return '<circle cx="' + x.toFixed(1) + '" cy="' + dY(T).toFixed(1) + '" r="4.2" fill="#fff" stroke="' +
+             sp.color + '" stroke-width="2.2"/>';
+    }).join("");
+    dtip.innerHTML = '<div class="tt">距内表面 ' + fmt(xmm, 1) + ' mm</div>' + rows;
+    dtip.style.opacity = "1";
+    var rect = dwrap.getBoundingClientRect();
+    var cx = evt.clientX - rect.left, cy = evt.clientY - rect.top;
+    var tw = dtip.offsetWidth, th = dtip.offsetHeight;
+    var left = cx + 16;
+    if(left + tw > rect.width - 4) left = cx - tw - 16;
+    left = Math.max(4, left);
+    var top = Math.min(Math.max(4, cy - th - 12), Math.max(4, rect.height - th - 4));
+    dtip.style.left = left + "px";
+    dtip.style.top = top + "px";
+  }
+
+  function bindDepth(){
+    var svg = $("#dChart");
     if(!svg) return;
     function toLocal(evt){
       var pt = svg.createSVGPoint();
@@ -2040,46 +2105,13 @@ function solveTransient(cfg){
     function move(evt){
       var loc = toLocal(evt);
       if(!loc) return;
-      var x = Math.max(mL, Math.min(mL + pw, loc.x));
-      var t = lInvX(x);
-      var vis = lvisible();
-      if(!vis.length) return;
-      var marks = [];
-      vis.forEach(function(sr){
-        var r = T_at(sr.pts, t);
-        if(r) marks.push({ name:sr.name, color:sr.color, T:r.T });
-      });
-      if(!marks.length) return;
-      var g = $("#hovGL"), v = $("#lHovV"), dots = $("#lHovDots");
-      if(!g) return;
-      g.style.display = "";
-      v.setAttribute("x1", x.toFixed(1));
-      v.setAttribute("x2", x.toFixed(1));
-      dots.innerHTML = marks.map(function(mk){
-        return '<circle cx="' + x.toFixed(1) + '" cy="' + lY(mk.T).toFixed(1) +
-               '" r="4.4" fill="#fff" stroke="' + mk.color + '" stroke-width="2.2"/>';
-      }).join("");
-      var html = '<div class="tt">第 ' + fmt(t, 2) + ' ' + esc(unitText()) + ' · 各层平均温度</div>' +
-        marks.map(function(mk){
-          return '<div style="margin-top:2px"><span class="swatch" style="background:' + mk.color + '"></span>' +
-                 esc(mk.name) + ' <b>' + fmt(mk.T, 1) + '</b> °C</div>';
-        }).join("");
-      ltip.innerHTML = html;
-      ltip.style.opacity = "1";
-      var rect = lwrap.getBoundingClientRect();
-      var cx = evt.clientX - rect.left, cy = evt.clientY - rect.top;
-      var tw = ltip.offsetWidth, th = ltip.offsetHeight;
-      var left = cx + 16;
-      if(left + tw > rect.width - 4) left = cx - tw - 16;
-      left = Math.max(4, left);
-      var top = Math.min(Math.max(4, cy - th - 12), Math.max(4, rect.height - th - 4));
-      ltip.style.left = left + "px";
-      ltip.style.top = top + "px";
+      var px = Math.max(mL, Math.min(mL + pw, loc.x));
+      paintHover(dInvX(px), evt);
     }
     function leave(){
-      var g = $("#hovGL");
+      var g = $("#hovGD");
       if(g) g.style.display = "none";
-      if(ltip) ltip.style.opacity = "0";
+      if(dtip) dtip.style.opacity = "0";
     }
     svg.addEventListener("mousemove", move);
     svg.addEventListener("mouseleave", leave);
@@ -2090,65 +2122,60 @@ function solveTransient(cfg){
     svg.addEventListener("click", function(e){
       var loc = toLocal(e);
       if(!loc || loc.x < mL || loc.x > mL + pw) return;
-      var t = lInvX(loc.x);
-      var el = $("#qLayerTime");
-      if(el){ el.value = (+t.toFixed(3)); runLayerQuery(); }
+      var el = $("#qDepth");
+      if(el){ el.value = (+dInvX(loc.x).toFixed(1)); runDepthQuery(); }
     });
   }
 
-  function runLayerQuery(){
-    var box = $("#resLayer");
+  function runDepthQuery(){
+    var box = $("#resDepth");
     if(!box) return;
-    var u = unitText();
-    var tag = $("#lUnitTag");
-    if(tag) tag.textContent = u;
-    var vis = lvisible();
-    var el = $("#qLayerTime");
+    var vis = dvisibleSnaps();
+    var el = $("#qDepth");
     var tv = el ? String(el.value).trim() : "";
-    if(!vis.length){
+    if(!profileData || !vis.length){
       box.className = "qres";
-      box.textContent = currentMode() === "sync" ? "暂无可查询的分层数据。" : "手动输入模式下没有分层数据。";
+      box.textContent = currentMode() === "sync" ? "暂无可查询的温度分布数据。" : "手动输入模式下没有分层数据。";
       return;
     }
     if(tv === ""){
       box.className = "qres";
-      box.textContent = "输入时间（如第 4 小时），查看该时刻每一层的平均温度。";
+      box.textContent = "输入厚度（如 120 mm），查看该处停炉后各时刻的温度。";
       return;
     }
-    var t = parseFloat(tv);
-    if(!Number.isFinite(t)){
+    var xmm = parseFloat(tv);
+    var xmax = dtotal();
+    if(!Number.isFinite(xmm)){
       box.className = "qres bad";
-      box.textContent = "时间格式有误。";
+      box.textContent = "厚度格式有误。";
       return;
     }
-    var p0 = vis[0].pts[0], pN = vis[0].pts[vis[0].pts.length - 1];
-    if(t < p0.t - 1e-9 || t > pN.t + 1e-9){
+    if(xmm < -1e-6 || xmm > xmax + 1e-6){
       box.className = "qres bad";
-      box.innerHTML = '时间 <b>' + fmt(t, 2) + '</b> ' + esc(u) + ' 超出计算范围（' +
-        fmt(p0.t, 2) + ' ~ ' + fmt(pN.t, 2) + ' ' + esc(u) + '）。';
+      box.innerHTML = '厚度 <b>' + fmt(xmm, 1) + '</b> mm 超出范围（0 ~ ' + fmt(xmax, 0) + ' mm）。';
       return;
     }
-    var rows = [], hot = null, cold = null;
-    vis.forEach(function(sr){
-      var r = T_at(sr.pts, t);
-      if(!r) return;
-      if(!hot || r.T > hot.T) hot = { name:sr.name, T:r.T };
-      if(!cold || r.T < cold.T) cold = { name:sr.name, T:r.T };
-      rows.push('<div class="row2"><span class="nm"><span class="swatch" style="background:' + sr.color + '"></span>' +
-                esc(sr.name) + '</span><span class="vv">' + fmt(r.T, 1) + ' °C</span></div>');
+    var rows = "", T0 = null, TN = null, tmin = Infinity, tmax = -Infinity;
+    vis.forEach(function(sp){
+      var T = T_atX(profileData.x, sp.T, xmm);
+      if(T0 === null) T0 = T;
+      TN = T;
+      if(T < tmin) tmin = T;
+      if(T > tmax) tmax = T;
+      rows += '<div class="row2"><span class="nm"><span class="swatch" style="background:' + sp.color + '"></span>' +
+              esc("停炉后 " + snapLabel(sp)) + '</span><span class="vv">' + fmt(T, 1) + ' °C</span></div>';
     });
     box.className = "qres good";
-    box.innerHTML = '<div style="margin-bottom:4px">第 <b>' + fmt(t, 2) + '</b> ' + esc(u) + ' 各层平均温度：</div>' +
-      rows.join("") +
-      (hot && cold && hot.T - cold.T > 0.5
-        ? '<div class="sub" style="margin-top:4px">层间温差 <b>' + fmt(hot.T - cold.T, 1) + '</b> °C（' +
-          esc(hot.name) + ' ↔ ' + esc(cold.name) + '）</div>'
+    box.innerHTML = '<div style="margin-bottom:4px">距内表面 <b>' + fmt(xmm, 1) + '</b> mm 处：</div>' + rows +
+      (vis.length > 1
+        ? '<div class="sub" style="margin-top:4px">该处温度 ' + fmt(tmin, 1) + ' ~ ' + fmt(tmax, 1) +
+          ' °C，全程降温 <b>' + fmt(T0 - TN, 1) + '</b> °C</div>'
         : "");
   }
 
-  (function initLayerQuery(){
-    var el = $("#qLayerTime");
-    if(el) el.addEventListener("input", runLayerQuery);
+  (function initDepthQuery(){
+    var el = $("#qDepth");
+    if(el) el.addEventListener("input", runDepthQuery);
   })();
 
   /* ---------------- 查询 ---------------- */
@@ -2240,8 +2267,8 @@ function solveTransient(cfg){
 
     renderStats();
     draw();
-    drawLayer();
-    runLayerQuery();
+    drawDepth();
+    runDepthQuery();
     if(hov){                                  // 重绘后恢复悬停十字线
       var vis2 = visible();
       var g = $("#hovG");
@@ -2472,6 +2499,8 @@ function solveTransient(cfg){
     Array.prototype.forEach.call(c.querySelectorAll("[data-hov]"), function(n){
       if(n.parentNode) n.parentNode.removeChild(n);
     });
+    // 去掉副本的 id，避免报告里出现重复 id（重复 id 会让外层查询命中两份 SVG）
+    c.removeAttribute("id");
     Array.prototype.forEach.call(c.querySelectorAll("linearGradient stop"), function(s){
       s.setAttribute("stop-color", "#efefef");
       s.setAttribute("stop-opacity", "1");
@@ -2484,8 +2513,8 @@ function solveTransient(cfg){
       });
     });
     // 数据线：固定灰阶 + 不同线型，黑白下也能区分
-    var GRAYS = ["#000000", "#3d3d3d", "#6f6f6f", "#9b9b9b", "#c4c4c4"];
-    var DASH  = ["", "7 3", "2 2", "9 2 2 2", "5 2"];
+    var GRAYS = ["#000000", "#3d3d3d", "#6f6f6f", "#9b9b9b", "#c4c4c4", "#232323", "#8a8a8a"];
+    var DASH  = ["", "7 3", "2 2", "9 2 2 2", "5 2", "3 2 1 2", "12 3"];
     Array.prototype.forEach.call(c.querySelectorAll('path[fill="none"]'), function(p, i){
       p.setAttribute("stroke", GRAYS[i % GRAYS.length]);
       p.setAttribute("stroke-width", "1.6");
@@ -2606,13 +2635,16 @@ function solveTransient(cfg){
       if(kpis.length) H.push(pairTable(kpis));
     }
 
-    /* 各层平均温度（图 2） */
-    var lsvgNow = document.querySelector("#lChart");
-    if(lsvgNow && lsvgNow.querySelector("path")){
-      var lNames = r.layers.map(function(L){ return L.name; });
-      H.push('<figure>' + grayChart(lsvgNow).outerHTML +
-             '<figcaption>图 2　各层平均温度随时间变化（由内向外依次为：' + esc(lNames.join("、")) +
-             '；以灰阶与线型区分各层，曲线越靠下表示该层越靠外、降温越滞后）</figcaption></figure>');
+    /* 温度沿厚度分布（图 2） */
+    var dsvgNow = document.querySelector("#dChart");
+    if(dsvgNow && dsvgNow.querySelector("path")){
+      var dLabels = [];
+      Array.prototype.forEach.call(document.querySelectorAll("#dLegend .lg"), function(n){
+        dLabels.push(n.textContent.trim());
+      });
+      H.push('<figure>' + grayChart(dsvgNow).outerHTML +
+             '<figcaption>图 2　停炉后温度沿厚度分布（曲线依次为 ' + esc(dLabels.join("、")) +
+             '；横轴为距内表面的厚度，左端为内表面、右端为外表面）</figcaption></figure>');
     }
 
     /* 五、依据与说明 */
@@ -3458,7 +3490,7 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.1.0";
+  var VERSION = "1.1.1";
   var BUILD   = "2026-10-24";
 
   /* ★ 更新清单地址
