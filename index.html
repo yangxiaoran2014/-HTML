@@ -211,13 +211,13 @@
 
   .chartwrap{position:relative; width:100%}
   .chartwrap svg{width:100%; height:auto; display:block; touch-action:none}
-  #tip{
+  #tip, #tipL{
     position:absolute; pointer-events:none; z-index:5; background:rgba(12,32,60,.95); color:#fff;
     border-radius:9px; padding:7px 10px; font-size:12px; line-height:1.5; white-space:nowrap;
     box-shadow:0 8px 20px rgba(9,25,48,.3); opacity:0; transition:opacity .1s;
   }
-  #tip .tt{font-size:10.5px; color:#9fc0e8; letter-spacing:.3px}
-  #tip b{font-size:13px}
+  #tip .tt, #tipL .tt{font-size:10.5px; color:#9fc0e8; letter-spacing:.3px}
+  #tip b, #tipL b{font-size:13px}
   .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:10px}
   .legend .lg{cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:5px}
   .legend .lg i{width:14px; height:3px; border-radius:2px; display:inline-block}
@@ -311,7 +311,8 @@
   #printReport figure svg{width:100%; height:auto; display:block; border:.5pt solid #000}
   #printReport figcaption{font-size:8pt; text-align:center; margin-top:1.5mm}
   #printReport .rpt-formula{font-family:"Courier New",Consolas,monospace; font-size:8.5pt;
-    line-height:1.75; margin:0 0 3mm; white-space:pre-wrap; word-break:break-word}
+    line-height:1.75; margin:0 0 3mm; white-space:pre-wrap; word-break:break-word;
+    break-inside:avoid; page-break-inside:avoid}
   #printReport ul{margin:0 0 3mm; padding-left:5mm; font-size:9pt}
   #printReport li{margin:.8mm 0}
   #printReport .foot{margin-top:5mm; padding-top:2mm; border-top:.5pt solid #000;
@@ -695,6 +696,21 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
           <h2>温度随时间变化</h2>
           <div class="chartwrap" id="chartWrap"><div id="tip"></div></div>
           <div class="legend" id="kLegend"></div>
+        </section>
+
+        <section class="card">
+          <h2>层温曲线<small>各层平均温度随时间变化</small></h2>
+          <div class="chartwrap" id="layerWrap"><div id="tipL"></div></div>
+          <div class="legend" id="lLegend"></div>
+          <div class="qbox" style="margin-top:10px">
+            <div class="t"><span class="dot g"></span>按时间 → 查各层平均温度</div>
+            <div class="qrow">
+              <span class="inp"><input type="number" id="qLayerTime" step="0.1" placeholder="例如 4"></span>
+              <span class="unit" id="lUnitTag">h</span>
+            </div>
+            <div class="qres" id="resLayer">输入时间（如第 4 小时），查看该时刻每一层的平均温度。</div>
+          </div>
+          <div class="hint">层温 = 该层沿厚度（圆筒沿半径）的平均温度，比外表面滞后；鼠标移到曲线上可看该时刻各层温度，点击曲线可把时间填入查询框。</div>
         </section>
 
         
@@ -1293,6 +1309,7 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     var ta = num("#gTa");
     envT = (pts.length && Number.isFinite(ta)) ? ta : NaN;
     series = pts.length ? [{name:"实测数据", color:PALETTE[0], pts:pts, visible:true}] : [];
+    layerSeries = [];
     lastInfo = pts.length ? ("手动数据 " + pts.length + " 个点") : "";
   }
 
@@ -1479,6 +1496,28 @@ function solveTransient(cfg){
       return out;
     }
 
+    /* 各层平均温度：层内节点间按线性插值，沿厚度精确积分后取平均值
+       （圆筒同样按 (r−r₁) 的厚度权重，与稳态报告里的“平均温度”口径一致） */
+    function layerMeans(){
+      var out = [], k;
+      for(k = 0; k < layers.length; k++){
+        var x0 = xIf[k], x1 = xIf[k + 1], acc = 0, wsum = 0;
+        for(var j = 0; j < N - 1; j++){
+          var a0 = xs[j] - (plane ? 0 : r1), b0 = xs[j + 1] - (plane ? 0 : r1);
+          var s0 = Math.max(a0, x0), e0 = Math.min(b0, x1);
+          if(e0 - s0 <= 1e-12) continue;
+          var span = b0 - a0;
+          var T0 = T[j], dT = T[j + 1] - T[j];
+          var Ta = T0 + dT * (span > 0 ? (s0 - a0) / span : 0);
+          var Tb = T0 + dT * (span > 0 ? (e0 - a0) / span : 1);
+          acc += 0.5 * (Ta + Tb) * (e0 - s0);
+          wsum += (e0 - s0);
+        }
+        out.push(wsum > 0 ? acc / wsum : T[0]);
+      }
+      return out;
+    }
+
     /* ---- 时间推进：几何递增步长 + 命中输出时刻 ---- */
     var tEnd = cfg.tEnd, nOut = cfg.nOut, dtOut = tEnd / (nOut - 1);
     updateG(T);
@@ -1493,7 +1532,7 @@ function solveTransient(cfg){
     var dtMax = Math.max(dt0, tEnd / 50);
     var grow = 1.06;
 
-    var times = [0], samples = [sample()];
+    var times = [0], samples = [sample()], samplesL = [layerMeans()];
     var t = 0, nextOut = 1, dt = dt0, steps = 0, capped = false, dtLast = dt;
     while(nextOut < nOut && t < tEnd - 1e-12){
       var tTarget = nextOut * dtOut;
@@ -1507,6 +1546,7 @@ function solveTransient(cfg){
       if(t >= tTarget - 1e-9){
         times.push(tTarget);
         samples.push(sample());
+        samplesL.push(layerMeans());
         nextOut++;
       }
       if(steps >= 40000){ capped = true; break; }
@@ -1515,6 +1555,7 @@ function solveTransient(cfg){
     while(times.length < nOut){
       times.push(+(times.length * dtOut).toFixed(9));
       samples.push(samples[samples.length - 1].slice());
+      samplesL.push(samplesL[samplesL.length - 1].slice());
     }
 
     var mm = function(x){ return Math.round(x * 1000); };
@@ -1530,8 +1571,15 @@ function solveTransient(cfg){
       outSeries.push({name:nm, pts:pts});
     }
 
+    var outLayers = layers.map(function(L, idx){
+      var lpts = [];
+      for(var q4 = 0; q4 < times.length; q4++){ lpts.push({t:times[q4], T:samplesL[q4][idx]}); }
+      return {name:L.name, pts:lpts};
+    });
+
     return {
       series: outSeries,
+      layers: outLayers,
       info: {
         N:N, dx:dx, steps:steps, tEnd:tEnd, capped:capped, dt0:dt0, dtLast:dtLast,
         gridCapped:gridCapped, qInit:qInit, initInner:initInner, initOuter:initOuter,
@@ -1550,6 +1598,7 @@ function solveTransient(cfg){
     el.innerHTML = text;
   }
   function buildSync(){
+    layerSeries = [];
     var S = window.SteadySolver;
     var r = S ? S.result() : null;
     if(!r || !r.ok){
@@ -1601,6 +1650,14 @@ function solveTransient(cfg){
       return {
         name: s.name,
         color: PALETTE[i % PALETTE.length],
+        visible: true,
+        pts: s.pts.map(function(p){ return {t: p.t / fac, T: p.T}; })
+      };
+    });
+    layerSeries = (res.layers || []).map(function(s, i){
+      return {
+        name: s.name,
+        color: PALETTE[(i + 1) % PALETTE.length],
         visible: true,
         pts: s.pts.map(function(p){ return {t: p.t / fac, T: p.T}; })
       };
@@ -1761,7 +1818,7 @@ function solveTransient(cfg){
     }
 
     // 悬停图层
-    s.push('<g id="hovG" style="display:none">' +
+    s.push('<g id="hovG" data-hov="1" style="display:none">' +
       '<line id="hovV" x1="0" y1="' + mT + '" x2="0" y2="' + (mT + ph) + '" stroke="#5b7089" stroke-dasharray="3 3"/>' +
       '<g id="hovDots"></g></g>');
     s.push('<rect id="hit" x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '" fill="transparent" style="cursor:crosshair"/>');
@@ -1868,6 +1925,232 @@ function solveTransient(cfg){
     });
   }
 
+  /* ---------------- 层温曲线（各层平均温度） ---------------- */
+  var layerSeries = [];                       // [{name, color, pts:[{t,T}], visible}]
+  var lwrap = $("#layerWrap"), ltip = $("#tipL");
+  var LH = 366, LmT = 26, LmB = 56;
+  var lpH = LH - LmT - LmB;
+  var lview = null;
+
+  function lvisible(){ return layerSeries.filter(function(s){ return s.visible; }); }
+  function lX(t){ return mL + (t - lview.tmin) / (lview.tmax - lview.tmin) * pw; }
+  function lY(T){ return LmT + (1 - (T - lview.Tmin) / (lview.Tmax - lview.Tmin)) * lpH; }
+  function lInvX(x){ return lview.tmin + (x - mL) / pw * (lview.tmax - lview.tmin); }
+
+  function renderLLegend(){
+    var el = $("#lLegend");
+    if(!el) return;
+    if(!layerSeries.length){
+      el.innerHTML = '<span style="color:#8697ab">暂无分层数据</span>';
+      return;
+    }
+    el.innerHTML = layerSeries.map(function(s, i){
+      return '<span class="lg' + (s.visible ? "" : " off") + '" data-i="' + i + '">' +
+             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>';
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".lg"), function(node){
+      node.addEventListener("click", function(){
+        var i = +node.getAttribute("data-i");
+        layerSeries[i].visible = !layerSeries[i].visible;
+        drawLayer();
+        runLayerQuery();
+      });
+    });
+  }
+
+  function drawLayer(){
+    if(!lwrap) return;
+    var vis = lvisible();
+    if(!vis.length){
+      lwrap.innerHTML = '<div id="tipL"></div><div class="hint" style="padding:46px 10px;text-align:center">' +
+        (currentMode() === "sync"
+          ? "选项卡 ① 参数有效后，这里会显示「各层平均温度」随时间的降温曲线"
+          : "手动输入模式下没有分层数据；把数据来源切回「由稳态计算同步」即可看到") +
+        '</div>';
+      ltip = $("#tipL");
+      renderLLegend();
+      return;
+    }
+    var tmin = Infinity, tmax = -Infinity, Tmin = Infinity, Tmax = -Infinity;
+    vis.forEach(function(sr){
+      sr.pts.forEach(function(pt){
+        if(pt.t < tmin) tmin = pt.t;
+        if(pt.t > tmax) tmax = pt.t;
+        if(pt.T < Tmin) Tmin = pt.T;
+        if(pt.T > Tmax) Tmax = pt.T;
+      });
+    });
+    if(!(tmax > tmin)){ tmax = tmin + 1; }
+    if(!(Tmax > Tmin)){ Tmax = Tmin + 1; }
+    var padT = (tmax - tmin) * 0.02, padY = (Tmax - Tmin) * 0.10;
+    tmin = Math.max(0, tmin - padT);              // 时间轴仍以 0 为起点
+    tmax += padT; Tmin -= padY; Tmax += padY;
+    lview = { tmin:tmin, tmax:tmax, Tmin:Tmin, Tmax:Tmax };
+
+    var u = unitText();
+    var s = [];
+    s.push('<svg id="lChart" viewBox="0 0 ' + W + ' ' + LH + '" xmlns="' + SVGNS + '">');
+    s.push('<rect x="0" y="0" width="' + W + '" height="' + LH + '" fill="#fff"/>');
+    ticks(Tmin, Tmax, 5).forEach(function(T){
+      var y = lY(T);
+      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#edf2f9"/>');
+      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#8697ab">' +
+             (Math.abs(T) >= 100 ? T.toFixed(0) : T.toFixed(1)) + '</text>');
+    });
+    ticks(tmin, tmax, 7).forEach(function(t){
+      var x = lX(t);
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + LmT + '" x2="' + x.toFixed(1) + '" y2="' + (LmT + lpH) + '" stroke="#f2f6fc"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (LmT + lpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
+             (Math.abs(t) >= 100 ? t.toFixed(0) : t.toFixed(1)) + '</text>');
+    });
+    s.push('<line x1="' + mL + '" y1="' + (LmT + lpH) + '" x2="' + (mL + pw) + '" y2="' + (LmT + lpH) + '" stroke="#c9d8ea"/>');
+    s.push('<line x1="' + mL + '" y1="' + LmT + '" x2="' + mL + '" y2="' + (LmT + lpH) + '" stroke="#c9d8ea"/>');
+    s.push('<text x="' + (mL + pw / 2) + '" y="' + (LH - 14) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">时间 (' + esc(u) + ')</text>');
+    s.push('<text x="17" y="' + (LmT + lpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' + (LmT + lpH / 2) + ')">层平均温度 (°C)</text>');
+
+    vis.forEach(function(sr){
+      var d = sr.pts.map(function(pt, i){
+        return (i ? "L" : "M") + lX(pt.t).toFixed(1) + " " + lY(pt.T).toFixed(1);
+      }).join(" ");
+      s.push('<path d="' + d + '" fill="none" stroke="' + sr.color + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>');
+    });
+
+    s.push('<g id="hovGL" data-hov="1" style="display:none">' +
+      '<line id="lHovV" x1="0" y1="' + LmT + '" x2="0" y2="' + (LmT + lpH) + '" stroke="#5b7089" stroke-dasharray="3 3"/>' +
+      '<g id="lHovDots"></g></g>');
+    s.push('<rect id="lHit" x="' + mL + '" y="' + LmT + '" width="' + pw + '" height="' + lpH + '" fill="transparent" style="cursor:crosshair"/>');
+    s.push('</svg>');
+
+    lwrap.innerHTML = '<div id="tipL"></div>' + s.join("");
+    ltip = $("#tipL");
+    renderLLegend();
+    bindLayer();
+  }
+
+  function bindLayer(){
+    var svg = $("#lChart");
+    if(!svg) return;
+    function toLocal(evt){
+      var pt = svg.createSVGPoint();
+      pt.x = evt.clientX; pt.y = evt.clientY;
+      var m = svg.getScreenCTM();
+      if(!m) return null;
+      return pt.matrixTransform(m.inverse());
+    }
+    function move(evt){
+      var loc = toLocal(evt);
+      if(!loc) return;
+      var x = Math.max(mL, Math.min(mL + pw, loc.x));
+      var t = lInvX(x);
+      var vis = lvisible();
+      if(!vis.length) return;
+      var marks = [];
+      vis.forEach(function(sr){
+        var r = T_at(sr.pts, t);
+        if(r) marks.push({ name:sr.name, color:sr.color, T:r.T });
+      });
+      if(!marks.length) return;
+      var g = $("#hovGL"), v = $("#lHovV"), dots = $("#lHovDots");
+      if(!g) return;
+      g.style.display = "";
+      v.setAttribute("x1", x.toFixed(1));
+      v.setAttribute("x2", x.toFixed(1));
+      dots.innerHTML = marks.map(function(mk){
+        return '<circle cx="' + x.toFixed(1) + '" cy="' + lY(mk.T).toFixed(1) +
+               '" r="4.4" fill="#fff" stroke="' + mk.color + '" stroke-width="2.2"/>';
+      }).join("");
+      var html = '<div class="tt">第 ' + fmt(t, 2) + ' ' + esc(unitText()) + ' · 各层平均温度</div>' +
+        marks.map(function(mk){
+          return '<div style="margin-top:2px"><span class="swatch" style="background:' + mk.color + '"></span>' +
+                 esc(mk.name) + ' <b>' + fmt(mk.T, 1) + '</b> °C</div>';
+        }).join("");
+      ltip.innerHTML = html;
+      ltip.style.opacity = "1";
+      var rect = lwrap.getBoundingClientRect();
+      var cx = evt.clientX - rect.left, cy = evt.clientY - rect.top;
+      var tw = ltip.offsetWidth, th = ltip.offsetHeight;
+      var left = cx + 16;
+      if(left + tw > rect.width - 4) left = cx - tw - 16;
+      left = Math.max(4, left);
+      var top = Math.min(Math.max(4, cy - th - 12), Math.max(4, rect.height - th - 4));
+      ltip.style.left = left + "px";
+      ltip.style.top = top + "px";
+    }
+    function leave(){
+      var g = $("#hovGL");
+      if(g) g.style.display = "none";
+      if(ltip) ltip.style.opacity = "0";
+    }
+    svg.addEventListener("mousemove", move);
+    svg.addEventListener("mouseleave", leave);
+    svg.addEventListener("touchmove", function(e){
+      if(e.touches.length){ move(e.touches[0]); e.preventDefault(); }
+    }, { passive:false });
+    svg.addEventListener("touchend", leave);
+    svg.addEventListener("click", function(e){
+      var loc = toLocal(e);
+      if(!loc || loc.x < mL || loc.x > mL + pw) return;
+      var t = lInvX(loc.x);
+      var el = $("#qLayerTime");
+      if(el){ el.value = (+t.toFixed(3)); runLayerQuery(); }
+    });
+  }
+
+  function runLayerQuery(){
+    var box = $("#resLayer");
+    if(!box) return;
+    var u = unitText();
+    var tag = $("#lUnitTag");
+    if(tag) tag.textContent = u;
+    var vis = lvisible();
+    var el = $("#qLayerTime");
+    var tv = el ? String(el.value).trim() : "";
+    if(!vis.length){
+      box.className = "qres";
+      box.textContent = currentMode() === "sync" ? "暂无可查询的分层数据。" : "手动输入模式下没有分层数据。";
+      return;
+    }
+    if(tv === ""){
+      box.className = "qres";
+      box.textContent = "输入时间（如第 4 小时），查看该时刻每一层的平均温度。";
+      return;
+    }
+    var t = parseFloat(tv);
+    if(!Number.isFinite(t)){
+      box.className = "qres bad";
+      box.textContent = "时间格式有误。";
+      return;
+    }
+    var p0 = vis[0].pts[0], pN = vis[0].pts[vis[0].pts.length - 1];
+    if(t < p0.t - 1e-9 || t > pN.t + 1e-9){
+      box.className = "qres bad";
+      box.innerHTML = '时间 <b>' + fmt(t, 2) + '</b> ' + esc(u) + ' 超出计算范围（' +
+        fmt(p0.t, 2) + ' ~ ' + fmt(pN.t, 2) + ' ' + esc(u) + '）。';
+      return;
+    }
+    var rows = [], hot = null, cold = null;
+    vis.forEach(function(sr){
+      var r = T_at(sr.pts, t);
+      if(!r) return;
+      if(!hot || r.T > hot.T) hot = { name:sr.name, T:r.T };
+      if(!cold || r.T < cold.T) cold = { name:sr.name, T:r.T };
+      rows.push('<div class="row2"><span class="nm"><span class="swatch" style="background:' + sr.color + '"></span>' +
+                esc(sr.name) + '</span><span class="vv">' + fmt(r.T, 1) + ' °C</span></div>');
+    });
+    box.className = "qres good";
+    box.innerHTML = '<div style="margin-bottom:4px">第 <b>' + fmt(t, 2) + '</b> ' + esc(u) + ' 各层平均温度：</div>' +
+      rows.join("") +
+      (hot && cold && hot.T - cold.T > 0.5
+        ? '<div class="sub" style="margin-top:4px">层间温差 <b>' + fmt(hot.T - cold.T, 1) + '</b> °C（' +
+          esc(hot.name) + ' ↔ ' + esc(cold.name) + '）</div>'
+        : "");
+  }
+
+  (function initLayerQuery(){
+    var el = $("#qLayerTime");
+    if(el) el.addEventListener("input", runLayerQuery);
+  })();
+
   /* ---------------- 查询 ---------------- */
   function runQueries(){
     var u = unitText();
@@ -1957,6 +2240,8 @@ function solveTransient(cfg){
 
     renderStats();
     draw();
+    drawLayer();
+    runLayerQuery();
     if(hov){                                  // 重绘后恢复悬停十字线
       var vis2 = visible();
       var g = $("#hovG");
@@ -2126,6 +2411,9 @@ function solveTransient(cfg){
   tabs.forEach(function(t){
     t.addEventListener("click", function(){ show(t.getAttribute("data-panel")); });
   });
+  // 便于分享/截图：index.html?tab=2 或 #curve 直接打开选项卡 ②
+  var qm = /[?&]tab=(\d)/.exec(location.search);
+  if((qm && qm[1] === "2") || location.hash === "#curve") show("panelCurve");
 })();
 </script>
 <script>
@@ -2181,7 +2469,9 @@ function solveTransient(cfg){
   }
   function grayChart(svg){
     var c = svg.cloneNode(true);
-    var hov = c.querySelector("#hovG"); if(hov && hov.parentNode) hov.parentNode.removeChild(hov);
+    Array.prototype.forEach.call(c.querySelectorAll("[data-hov]"), function(n){
+      if(n.parentNode) n.parentNode.removeChild(n);
+    });
     Array.prototype.forEach.call(c.querySelectorAll("linearGradient stop"), function(s){
       s.setAttribute("stop-color", "#efefef");
       s.setAttribute("stop-opacity", "1");
@@ -2314,6 +2604,15 @@ function solveTransient(cfg){
              '<figcaption>图 1　各界面温度随时间变化（曲线依次：' + esc(legend.join("、")) +
              '；线型依次为实线、虚线、点线、点划线）</figcaption></figure>');
       if(kpis.length) H.push(pairTable(kpis));
+    }
+
+    /* 各层平均温度（图 2） */
+    var lsvgNow = document.querySelector("#lChart");
+    if(lsvgNow && lsvgNow.querySelector("path")){
+      var lNames = r.layers.map(function(L){ return L.name; });
+      H.push('<figure>' + grayChart(lsvgNow).outerHTML +
+             '<figcaption>图 2　各层平均温度随时间变化（由内向外依次为：' + esc(lNames.join("、")) +
+             '；以灰阶与线型区分各层，曲线越靠下表示该层越靠外、降温越滞后）</figcaption></figure>');
     }
 
     /* 五、依据与说明 */
@@ -2882,7 +3181,8 @@ function solveTransient(cfg){
         case "code":
           b.text.split("\n").forEach(function(ln, k, arr){
             out.push(wPara(wRun(ln, { font:"Courier New", eastAsia:"\u5b8b\u4f53", sz:17 }),
-              { line:340, after:(k === arr.length - 1 ? 150 : 0) }));
+              { line:340, after:(k === arr.length - 1 ? 150 : 0),
+                keepNext:(k < arr.length - 1) }));
           });
           break;
         case "list":
@@ -3158,8 +3458,8 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.0.4";
-  var BUILD   = "2026-10-23";
+  var VERSION = "1.1.0";
+  var BUILD   = "2026-10-24";
 
   /* ★ 更新清单地址
      · MANIFEST_REL：托管在 GitHub Pages 等服务器上时用（相对路径、同源，最省事）
