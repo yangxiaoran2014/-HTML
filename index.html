@@ -5,292 +5,513 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>耐火材料温度计算器 · 外壁温度与降温曲线</title>
 <style>
+  /* =========================================================================
+     设计令牌
+     ========================================================================= */
   :root{
-    --bg:#edf1f7; --card:#ffffff; --line:#dce4ef; --txt:#12233d; --muted:#5b7089; --dim:#8b9bb0;
-    --accent:#1d5fd0; --accent2:#0e9488; --ok:#0f7a56; --warn:#a1590a; --err:#c02626;
-    --warn-bg:#fff8ea; --warn-line:#f0d8a8; --err-bg:#fdeeee; --err-line:#f2c8c8;
-    --info-bg:#f3f7fd; --info-line:#d5e3f7; --ok-bg:#f1faf6; --ok-line:#cbe8da;
-    --rad:14px; --shadow:0 1px 2px rgba(16,38,72,.05), 0 6px 18px rgba(16,38,72,.055);
+    /* 面 */
+    --bg:#eef2f8; --surface:#fff; --surface-2:#f7fafd; --surface-3:#eff4fa;
+    --line:#e0e7f1; --line-2:#cfdaea;
+    /* 字（--txt-3 在 #fff 上约 4.7:1） */
+    --txt:#101f33; --txt-2:#465a72; --txt-3:#5b6d84;
+    /* 色 */
+    --accent:#1d5fd0; --accent-2:#0e9488; --accent-ink:#12336b; --accent-soft:#e9f1fd;
+    --ok:#0f7a56; --ok-bg:#f1faf6; --ok-line:#cbe8da;
+    --warn:#a1590a; --warn-bg:#fff8ea; --warn-line:#f0d8a8;
+    --err:#c02626; --err-bg:#fdeeee; --err-line:#f2c8c8;
+    --info-bg:#f3f7fd; --info-line:#d5e3f7;
+    /* 间距（4 基） */
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s7:32px;
+    /* 圆角 */
+    --r1:8px; --r2:12px; --r3:16px; --r-pill:999px;
+    /* 字号 */
+    --f1:11px; --f2:12px; --f3:13px; --f4:14px; --f5:16px; --f6:20px; --f7:28px; --f8:44px;
+    /* 阴影 / 动效 */
+    --sh1:0 1px 2px rgba(16,38,72,.06);
+    --sh2:0 1px 2px rgba(16,38,72,.05),0 8px 20px rgba(16,38,72,.06);
+    --sh3:0 18px 44px rgba(12,39,73,.2);
+    --topbar-h:56px;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    color-scheme:light;
   }
-  *{box-sizing:border-box}
+
+  /* =========================================================================
+     基础
+     ========================================================================= */
+  *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;padding:0}
+  html{scroll-padding-top:calc(var(--topbar-h) + 14px)}
   body{
-    background:var(--bg); color:var(--txt); font-size:14px; line-height:1.55;
+    background:var(--bg); color:var(--txt); font-size:var(--f4); line-height:1.55;
     font-family:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,-apple-system,sans-serif;
     -webkit-font-smoothing:antialiased;
   }
-  .num, input, td, .kpi .v, .hero .val{font-variant-numeric:tabular-nums}
+  .num, input, td, .kpi .v, .hero .val, .summary-item .v{font-variant-numeric:tabular-nums}
+  a{color:var(--accent)}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important; scroll-behavior:auto !important}
+  }
 
-  /* ===== 顶栏 ===== */
-  .topbar{
-    position:sticky; top:0; z-index:30;
-    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
-    padding:0 20px; min-height:58px;
-    background:linear-gradient(115deg,#0c2749 0%,#1d5fd0 62%,#0d8578 100%);
-    color:#fff; box-shadow:0 2px 12px rgba(12,39,73,.22);
-  }
-  .brand{display:flex; align-items:baseline; gap:10px; min-width:0}
-  .brand b{font-size:16px; font-weight:600; letter-spacing:.4px; white-space:nowrap}
-  .brand span{font-size:12px; opacity:.72; white-space:nowrap}
-  .tabs{display:flex; gap:6px; margin-left:auto; background:rgba(255,255,255,.14); padding:4px; border-radius:11px}
-  .tab{
-    border:0; background:transparent; color:rgba(255,255,255,.82); font:inherit; font-size:13px;
-    padding:7px 14px; border-radius:8px; cursor:pointer; white-space:nowrap; transition:.15s;
-  }
-  .tab:hover{background:rgba(255,255,255,.13); color:#fff}
-  .tab.active{background:#fff; color:#12336b; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.16)}
-  .printbtn{
-    margin-left:10px; font-size:12.5px; color:#fff; border-color:rgba(255,255,255,.45);
-    background:rgba(255,255,255,.14);
-  }
-  .printbtn:hover{background:rgba(255,255,255,.26); color:#fff; border-color:#fff}
-
-  /* ===== 工作台骨架 ===== */
-  .workbench{
-    display:grid; grid-template-columns:376px minmax(0,1fr); gap:16px;
-    max-width:1560px; margin:0 auto; padding:16px 18px 40px; align-items:start;
-  }
-  .rail{display:flex; flex-direction:column; gap:14px; position:sticky; top:74px;
-        max-height:calc(100vh - 92px); overflow-y:auto; padding-right:3px; scrollbar-width:thin}
-  .stage{display:flex; flex-direction:column; gap:14px; min-width:0}
-  .card{
-    background:var(--card); border:1px solid var(--line); border-radius:var(--rad);
-    box-shadow:var(--shadow); padding:15px 16px; min-width:0;
-  }
-  h2{
-    margin:0 0 12px; font-size:13px; font-weight:600; color:var(--muted);
-    letter-spacing:.5px; display:flex; align-items:center; gap:8px;
-  }
-  h2::before{content:""; width:3px; height:13px; border-radius:2px; background:var(--accent)}
-  h2 small{font-weight:400; color:var(--dim); letter-spacing:0}
-  .panel.hidden{display:none !important}
+  /* 工具类 */
   .hidden{display:none !important}
+  .muted{color:var(--txt-3); font-weight:400}
+  .only-mobile{display:none !important}
+  .skip{
+    position:fixed; left:12px; top:-52px; z-index:100; padding:9px 14px; border-radius:0 0 10px 10px;
+    background:var(--accent); color:#fff; font-size:var(--f2); text-decoration:none;
+    transition:top .16s var(--ease);
+  }
+  .skip:focus{top:0}
 
-  /* ===== 分段控件 ===== */
-  .modes{display:flex; gap:4px; background:#f1f5fb; border:1px solid var(--line); border-radius:10px; padding:3px}
-  .modes label{flex:1; margin:0; cursor:pointer; position:relative}
+  /* =========================================================================
+     顶栏
+     ========================================================================= */
+  .topbar{
+    position:sticky; top:0; z-index:30; height:var(--topbar-h);
+    display:flex; align-items:center; gap:var(--s4);
+    padding:0 var(--s5); background:#0f2a4d; color:#fff;
+  }
+  .topbar::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:2px;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2) 60%,transparent);
+    opacity:.9; pointer-events:none;
+  }
+  .brand{display:flex; align-items:center; gap:10px; min-width:0}
+  .brand-mark{width:24px; height:24px; flex:0 0 auto; display:block}
+  .brand b{font-size:15px; font-weight:600; letter-spacing:.3px; white-space:nowrap}
+  .brand span{font-size:var(--f2); color:rgba(255,255,255,.62); white-space:nowrap}
+  .tabs{
+    display:flex; gap:2px; margin-left:auto; padding:3px; border-radius:10px;
+    background:rgba(255,255,255,.1);
+  }
+  .tab{
+    border:0; background:transparent; color:rgba(255,255,255,.82); font:inherit;
+    font-size:var(--f3); padding:6px 14px; border-radius:7px; cursor:pointer;
+    white-space:nowrap; transition:background .14s var(--ease), color .14s var(--ease);
+  }
+  .tab:hover{background:rgba(255,255,255,.14); color:#fff}
+  .tab.active{background:#fff; color:var(--accent-ink); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,.18)}
+  .tab:focus-visible{outline-color:#fff}
+
+  /* 动作按钮组 */
+  .actions{display:flex; align-items:center; gap:var(--s2)}
+  .actiongroup{
+    display:flex; align-items:stretch; border:1px solid rgba(255,255,255,.3);
+    border-radius:9px; overflow:hidden; background:rgba(255,255,255,.1);
+  }
+  .actiongroup .btn{
+    border:0; border-radius:0; background:transparent; color:#fff;
+    font-size:var(--f2); padding:7px 13px;
+  }
+  .actiongroup .btn + .btn{border-left:1px solid rgba(255,255,255,.22)}
+  .actiongroup .btn:hover{background:rgba(255,255,255,.18); color:#fff}
+  .actiongroup .btn:disabled{opacity:.55; cursor:progress}
+  .expwrap{position:relative; display:flex}
+  .expmenu{
+    position:absolute; right:0; top:calc(100% + 8px); z-index:60; width:280px;
+    background:var(--surface); color:var(--txt); border:1px solid var(--line);
+    border-radius:var(--r2); box-shadow:var(--sh3); padding:5px; font-size:var(--f3);
+  }
+  .expmenu[hidden]{display:none}
+  .expmenu button{
+    display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; border:0;
+    background:transparent; font:inherit; padding:10px 12px; border-radius:8px; cursor:pointer; color:inherit;
+  }
+  .expmenu button:hover{background:var(--surface-3)}
+  .expmenu button:disabled{opacity:.5; cursor:progress}
+  .expmenu button b{font-size:var(--f3); font-weight:600}
+  .expmenu button i{font-style:normal; font-size:var(--f1); color:var(--txt-3); line-height:1.45}
+  .expmenu[hidden]{display:none}
+
+  /* =========================================================================
+     外壳
+     ========================================================================= */
+  main{display:block}
+  .panel.hidden{display:none !important}
+  .workbench{
+    display:grid; grid-template-columns:360px minmax(0,1fr); gap:var(--s5);
+    max-width:1480px; margin:0 auto; padding:var(--s5) var(--s6) 56px; align-items:start;
+  }
+  .rail{
+    display:flex; flex-direction:column; gap:var(--s4); min-width:0;
+    position:sticky; top:calc(var(--topbar-h) + 16px);
+    max-height:calc(100vh - var(--topbar-h) - 32px); overflow-y:auto;
+    padding-right:4px; scrollbar-width:thin;
+  }
+  .stage{display:flex; flex-direction:column; gap:var(--s4); min-width:0}
+
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r2);
+    box-shadow:var(--sh2); padding:var(--s4) 18px; min-width:0;
+  }
+  .card-hd{display:flex; align-items:center; justify-content:space-between; gap:var(--s3); margin-bottom:var(--s3)}
+  .card-hd h2{margin:0}
+  .card-act{display:flex; align-items:center; gap:8px; flex:0 0 auto}
+  h2{
+    margin:0 0 var(--s3); font-size:var(--f2); font-weight:600; color:var(--txt-2);
+    letter-spacing:.4px; display:flex; align-items:center; gap:8px;
+  }
+  h2::before{content:""; width:3px; height:13px; border-radius:2px; background:var(--accent); flex:0 0 auto}
+  h2 small{font-weight:400; color:var(--txt-3); letter-spacing:0; font-size:var(--f2)}
+
+  /* =========================================================================
+     分段控件 / 表单
+     ========================================================================= */
+  .modes{display:flex; gap:3px; background:var(--surface-3); border:1px solid var(--line); border-radius:10px; padding:3px}
+  .modes label{flex:1; margin:0; cursor:pointer; position:relative; min-width:0}
   .modes input{position:absolute; opacity:0; width:0; height:0}
   .modes span{
-    display:block; text-align:center; padding:7px 4px; border-radius:8px;
-    font-size:12.5px; color:var(--muted); transition:.15s; white-space:nowrap;
+    display:block; text-align:center; padding:7px 4px; border-radius:7px;
+    font-size:var(--f2); color:var(--txt-2); transition:.14s var(--ease); white-space:nowrap;
   }
-  .modes input:checked + span{background:var(--accent); color:#fff; font-weight:600; box-shadow:0 2px 8px rgba(29,95,208,.26)}
   .modes label:hover span{color:var(--accent)}
-  .modes input:checked + span{color:#fff}
+  .modes input:checked + span{background:var(--accent); color:#fff; font-weight:600; box-shadow:0 1px 4px rgba(29,95,208,.28)}
+  .modes input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px}
 
-  /* ===== 表单 ===== */
-  .fields{display:flex; flex-direction:column; gap:10px; margin-top:12px}
+  .fields{display:flex; flex-direction:column; gap:10px; margin-top:var(--s3)}
   .fields .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  .fld{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); min-width:0}
-  .fld .lbl{display:flex; justify-content:space-between; align-items:baseline; gap:6px}
-  .fld .lbl i{font-style:normal; color:var(--dim); font-size:11px}
-  .inp{display:flex; align-items:center; gap:6px; background:#fbfcfe; border:1px solid var(--line);
-       border-radius:9px; padding:0 10px; transition:border-color .15s, box-shadow .15s, background .15s}
+  .fld{display:flex; flex-direction:column; gap:5px; font-size:var(--f2); color:var(--txt-2); min-width:0}
+  .fld .lbl{display:flex; justify-content:space-between; align-items:baseline; gap:6px; white-space:nowrap}
+  .fld .lbl i{font-style:normal; color:var(--txt-3); font-size:var(--f1); font-weight:400}
+  .inp{
+    display:flex; align-items:center; gap:6px; min-height:38px; background:#fbfcfe;
+    border:1px solid var(--line); border-radius:9px; padding:0 11px;
+    transition:border-color .14s var(--ease), box-shadow .14s var(--ease), background .14s var(--ease);
+  }
+  .inp:hover{border-color:var(--line-2)}
   .inp:focus-within{border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(29,95,208,.12)}
   .inp input{
     flex:1; min-width:0; border:0; outline:0; background:transparent; font:inherit;
-    font-size:14px; color:var(--txt); padding:8px 0;
+    font-size:var(--f4); color:var(--txt); padding:8px 0;
   }
-  .inp i{font-style:normal; font-size:11.5px; color:var(--dim); white-space:nowrap}
-  .inp select{border:0; background:transparent; font:inherit; font-size:13px; color:var(--txt); padding:8px 0; outline:0; min-width:0}
-  .hint{font-size:11px; color:var(--dim); line-height:1.45; margin-top:2px}
+  .inp i{font-style:normal; font-size:var(--f1); color:var(--txt-3); white-space:nowrap}
+  .inp select{border:0; background:transparent; font:inherit; font-size:var(--f3); color:var(--txt); padding:8px 0; outline:0; min-width:0}
+  .hint{font-size:var(--f1); color:var(--txt-3); line-height:1.5; margin-top:6px}
   .fld.inlineRow{flex-direction:row; align-items:center; gap:8px}
   .fld.inlineRow .inp{flex:1}
-
-  /* ===== 炉衬层（卡片行） ===== */
-  .layers{display:flex; flex-direction:column; gap:8px}
-  .lrow{border:1px solid var(--line); border-radius:11px; background:#fafcff; padding:6px 7px}
-  .lhead{display:flex; gap:6px; align-items:center}
-  .lhead .lname{
-    flex:1; min-width:0; border:0; background:transparent; font:inherit; font-size:12.5px; font-weight:600;
-    color:var(--txt); padding:2px 4px; border-radius:6px; outline:0;
-  }
-  .lhead .lname:focus{background:#fff; box-shadow:0 0 0 2px rgba(29,95,208,.16)}
-  .lhead .btn.danger{color:var(--dim); font-size:13px; padding:2px 6px}
-  .lhead .btn.danger:hover{color:var(--err); background:#fdeeee}
-  .lgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:4px}
-  .lgrid label{display:flex; align-items:center; gap:3px; font-size:9.5px; color:var(--dim); min-width:0}
-  .lgrid label i{font-style:normal; font-size:8px; color:#a9b7c9; white-space:nowrap}
-  .lgrid input, .lgrid select{
-    width:100%; min-width:0; flex:1; border:1px solid var(--line); border-radius:6px; background:#fff;
-    font:inherit; font-size:11.5px; color:var(--txt); padding:3px 5px; outline:0;
-  }
-  .lgrid input:focus, .lgrid select:focus{border-color:var(--accent); box-shadow:0 0 0 2px rgba(29,95,208,.12)}
-  .lgrid .presetWrap{grid-column:1 / -1}
   .row-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center}
   .spacer{flex:1}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 
-  /* ===== 按钮 ===== */
+  /* 炉衬层 */
+  .layers{display:flex; flex-direction:column; gap:8px}
+  .lrow{border:1px solid var(--line); border-radius:10px; background:var(--surface-2); padding:7px 8px}
+  .lhead{display:flex; gap:6px; align-items:center}
+  .lhead .lname{
+    flex:1; min-width:0; border:0; background:transparent; font:inherit; font-size:var(--f2); font-weight:600;
+    color:var(--txt); padding:3px 5px; border-radius:6px; outline:0;
+  }
+  .lhead .lname:hover{background:#fff}
+  .lhead .lname:focus{background:#fff; box-shadow:0 0 0 2px rgba(29,95,208,.18)}
+  .lgrid{display:grid; grid-template-columns:1fr 1fr; gap:7px 10px; margin-top:7px}
+  .lgrid .lf{display:flex; flex-direction:column; gap:3px; font-size:10px; color:var(--txt-3); min-width:0}
+  .lgrid .lf > span{display:flex; align-items:baseline; justify-content:space-between; gap:4px; white-space:nowrap}
+  .lgrid .lf > span i{font-style:normal; font-size:9px; color:var(--txt-3); opacity:.9}
+  .lgrid input, .lgrid select{
+    width:100%; min-width:0; border:1px solid var(--line); border-radius:6px; background:#fff;
+    font:inherit; font-size:var(--f2); color:var(--txt); padding:5px 7px; outline:0;
+  }
+  .lgrid input:hover, .lgrid select:hover{border-color:var(--line-2)}
+  .lgrid input:focus, .lgrid select:focus{border-color:var(--accent); box-shadow:0 0 0 2px rgba(29,95,208,.12)}
+  .lgrid .presetWrap{grid-column:1 / -1}
+
+  /* =========================================================================
+     按钮
+     ========================================================================= */
   .btn{
-    border:1px solid var(--line); background:#fff; color:var(--txt); font:inherit; font-size:12.5px;
-    padding:7px 12px; border-radius:9px; cursor:pointer; transition:.15s; white-space:nowrap;
+    display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px;
+    border:1px solid var(--line); background:var(--surface); color:var(--txt);
+    font:inherit; font-size:var(--f2); padding:7px 12px; border-radius:9px; cursor:pointer;
+    white-space:nowrap; transition:border-color .14s var(--ease), background .14s var(--ease), color .14s var(--ease);
   }
-  .btn:hover{border-color:var(--accent); color:var(--accent); background:#f6faff}
+  .btn:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-soft)}
+  .btn:active{transform:translateY(.5px)}
+  .btn:disabled{opacity:.55; cursor:progress}
   .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
-  .btn.primary:hover{background:#19509f; color:#fff}
-  .btn.ghost{color:var(--muted)}
-  .btn.danger{color:#b3242f; padding:4px 8px; border-color:transparent; background:transparent; font-size:14px; line-height:1}
-  .btn.danger:hover{background:#fdeeee; border-color:var(--err-line)}
-  .btn.wide{width:100%; justify-content:center; text-align:center}
-  .btn.mini{padding:4px 9px; font-size:11.5px; margin-left:auto; font-weight:500}
+  .btn.primary:hover{background:#19509f; border-color:#19509f; color:#fff}
+  .btn.ghost{color:var(--txt-2); border-color:var(--line)}
+  .btn.ghost:hover{color:var(--accent)}
+  .btn.danger{color:var(--txt-3); padding:3px 8px; border-color:transparent; background:transparent; font-size:var(--f4); line-height:1; min-height:24px}
+  .btn.danger:hover{background:var(--err-bg); border-color:var(--err-line); color:var(--err)}
+  .btn.wide{width:100%}
+  .btn.mini{padding:4px 10px; font-size:var(--f1); min-height:26px; margin-left:auto; font-weight:500}
+  .btn.confirming{border-color:var(--warn-line); background:var(--warn-bg); color:var(--warn)}
+  .btn .ico{width:14px; height:14px; flex:0 0 auto; display:block}
 
-  /* ===== 状态条 ===== */
-  #msgs{display:flex; flex-direction:column; gap:6px}
-  #msgs:empty{display:none}
+  /* =========================================================================
+     消息条
+     ========================================================================= */
+  #msgs, #kMsgs{display:flex; flex-direction:column; gap:8px}
+  #msgs:empty, #kMsgs:empty{display:none}
   .msg{
-    display:flex; gap:8px; align-items:flex-start; font-size:12.5px; line-height:1.5;
-    padding:8px 11px; border-radius:10px; border:1px solid transparent;
+    position:relative; font-size:var(--f2); line-height:1.55;
+    padding:9px 12px 9px 29px; border-radius:10px; border:1px solid transparent;
   }
-  .msg::before{content:""; flex:0 0 auto; width:7px; height:7px; border-radius:50%; margin-top:6px; background:currentColor; opacity:.75}
+  .msg::before{
+    content:""; position:absolute; left:13px; top:14px; width:7px; height:7px;
+    border-radius:50%; background:currentColor; opacity:.8;
+  }
   .msg.warn{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
   .msg.err{background:var(--err-bg); border-color:var(--err-line); color:var(--err)}
   .msg.info{background:var(--info-bg); border-color:var(--info-line); color:#2a558c}
   .msg.ok{background:var(--ok-bg); border-color:var(--ok-line); color:var(--ok)}
   .msg b{font-weight:600}
 
-  /* ===== 主结果 ===== */
+  /* =========================================================================
+     主结果卡
+     ========================================================================= */
   .hero-card{padding:0; overflow:hidden}
   .hero{
-    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
-    padding:18px 20px; background:linear-gradient(120deg,#0f2f5c,#1d5fd0 68%,#0e9488); color:#fff;
+    display:flex; align-items:center; justify-content:space-between; gap:var(--s4); flex-wrap:wrap;
+    padding:20px 22px; color:#fff;
+    background:radial-gradient(120% 180% at 0% 0%,rgba(255,255,255,.14),transparent 55%),
+               linear-gradient(120deg,#0f2f5c,#1d5fd0 66%,#0e9488);
   }
-  .hero .lbl{font-size:12px; opacity:.8; letter-spacing:.6px}
-  .hero .val{font-size:46px; font-weight:700; line-height:1.05; letter-spacing:-1px}
-  .hero .val .u{font-size:17px; font-weight:500; margin-left:4px; opacity:.85}
-  .hero .side{text-align:right; font-size:12.5px; line-height:1.65; opacity:.92}
-  .hero .side b{font-size:15px}
+  .hero .lbl{font-size:var(--f2); opacity:.82; letter-spacing:.5px}
+  .hero .val{font-size:var(--f8); font-weight:700; line-height:1.02; letter-spacing:-1px; margin-top:2px}
+  .hero .val .u{font-size:var(--f5); font-weight:500; margin-left:5px; opacity:.85; letter-spacing:0}
+  .hero .side{display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end}
+  .status-pill{
+    display:inline-flex; align-items:center; gap:5px; margin-top:8px; padding:3px 10px;
+    border-radius:var(--r-pill); border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; font-size:var(--f1); font-weight:600; letter-spacing:.2px;
+  }
+  .status-pill.ok{background:rgba(120,230,190,.2); border-color:rgba(150,240,205,.6); color:#dcfff1}
+  .status-pill.warn{background:rgba(245,190,95,.22); border-color:rgba(255,214,140,.65); color:#ffe9c2}
+  .status-pill.err{background:rgba(255,122,110,.24); border-color:rgba(255,166,155,.7); color:#ffdcd7}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:var(--r-pill);
+    border:1px solid var(--line); background:var(--surface-2); color:var(--txt-2); font-size:var(--f1);
+  }
+  .chip b{font-size:var(--f2); font-weight:600; color:var(--txt)}
+  .hero .chip{
+    background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.24); color:#e9f1ff;
+  }
+  .hero .chip b{color:#fff}
   .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:0}
-  .kpi{padding:11px 14px; border-right:1px solid var(--line)}
+  .kpi{padding:12px 16px; border-right:1px solid var(--line); min-width:0}
   .kpi:last-child{border-right:0}
-  .kpi .k{font-size:11px; color:var(--dim); white-space:nowrap}
-  .kpi .v{font-size:16px; font-weight:600; margin-top:2px; white-space:nowrap}
-  .kpi .v small{font-size:10.5px; font-weight:400; color:var(--dim); margin-left:2px}
+  .kpi .k{font-size:var(--f1); color:var(--txt-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .kpi .v{font-size:var(--f5); font-weight:600; margin-top:3px; white-space:nowrap}
+  .kpi .v small{font-size:var(--f1); font-weight:400; color:var(--txt-3); margin-left:2px}
 
-  /* ===== 表格 ===== */
-  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:11px; max-width:100%}
-  table{border-collapse:collapse; width:100%; font-size:12.5px}
+  /* 概览条（选项卡②） */
+  .summary{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px}
+  .summary-item{border:1px solid var(--line); border-radius:10px; background:var(--surface-2); padding:9px 12px; min-width:0}
+  .summary-item .k{font-size:var(--f1); color:var(--txt-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .summary-item .v{font-size:var(--f4); font-weight:600; margin-top:2px; white-space:nowrap}
+  .summary-item .v small{font-size:var(--f1); font-weight:400; color:var(--txt-3); margin-left:2px}
+
+  /* =========================================================================
+     表格
+     ========================================================================= */
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px; max-width:100%}
+  table{border-collapse:separate; border-spacing:0; width:100%; font-size:var(--f2)}
   th{
-    text-align:right; font-weight:600; font-size:11px; color:var(--dim); letter-spacing:.3px;
-    padding:8px 10px; background:#f7fafd; white-space:nowrap; border-bottom:1px solid var(--line);
+    text-align:right; font-weight:600; font-size:var(--f1); color:var(--txt-3); letter-spacing:.3px;
+    padding:9px 12px; background:var(--surface-2); white-space:nowrap;
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2;
   }
   th:first-child, td:first-child{text-align:left}
-  td{padding:7px 10px; border-bottom:1px solid #eff3f9; text-align:right; white-space:nowrap}
+  td{padding:8px 12px; border-bottom:1px solid #eff3f9; text-align:right; white-space:nowrap}
   tr:last-child td{border-bottom:0}
-  tbody tr:nth-child(even){background:#fcfdff}
-  tbody tr:hover{background:#f4f8fe}
+  tbody tr:nth-child(even){background:#fbfdff}
+  tbody tr:hover{background:var(--accent-soft)}
   td.name{color:var(--txt)}
-  .muted{color:var(--dim); font-weight:400}
+  .panel-scroll{
+    max-height:56vh; overflow:auto; border:1px solid var(--line); border-radius:10px;
+    scrollbar-gutter:stable; background:var(--surface);
+  }
+  .panel-scroll table{font-size:var(--f2)}
+  .panel-foot{
+    display:flex; align-items:center; justify-content:space-between; gap:var(--s3); flex-wrap:wrap;
+    margin-top:8px; font-size:var(--f1); color:var(--txt-3);
+  }
 
-  /* ===== 查询 / 图表（选项卡 ②） ===== */
-  .qbox{border:1px solid var(--line); border-radius:11px; padding:10px 11px; background:#fafcff; margin-bottom:10px}
-  .qcard{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  .qcard > h2, .qcard > #kMsgs, .qcard > .hint{grid-column:1 / -1}
-  .qcard .qbox{margin-bottom:0}
-  @media (max-width:760px){ .qcard{grid-template-columns:1fr} }
+  /* 沿厚度温度表 */
+  #depthTable{table-layout:fixed}
+  #depthTable th:nth-child(3), #depthTable th:nth-child(4){text-align:left}
+  #depthTable th:nth-child(1), #depthTable td:nth-child(1){width:23%}
+  #depthTable th:nth-child(2), #depthTable td:nth-child(2){width:21%}
+  #depthTable th:nth-child(3), #depthTable td:nth-child(3){width:27%}
+  #depthTable th:nth-child(4), #depthTable td:nth-child(4){width:29%}
+  #depthTable td{padding:6px 12px}
+  #depthTable th + th, #depthTable td + td{box-shadow:inset 1px 0 0 #f1f5fb}
+  @media (max-width:560px){ #depthTable{font-size:11.5px} #depthTable td, #depthTable th{padding:6px 8px} }
+  #depthTable th:nth-child(1), #depthTable td:nth-child(1){width:23%}
+  #depthTable th:nth-child(2), #depthTable td:nth-child(2){width:21%}
+  #depthTable th:nth-child(3), #depthTable td:nth-child(3){width:30%}
+  #depthTable th:nth-child(4), #depthTable td:nth-child(4){width:26%}
+  #depthTable .mark td{background:#fff6e5; color:var(--warn); font-weight:600}
+  #depthTable .mark td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+  #depthTable .iface td{background:var(--surface-2); color:var(--txt-2)}
+  #depthTable .name{text-align:left}
+  .isosum{
+    margin:0 0 var(--s3); font-size:var(--f2); line-height:1.6; color:var(--txt);
+    background:var(--info-bg); border:1px solid var(--info-line); border-radius:10px; padding:9px 12px;
+  }
+  .isosum b{color:var(--accent-ink)}
+  .isosum.warn{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
+  .isosum.warn b{color:var(--warn)}
+
+  /* =========================================================================
+     查询框 / 图表
+     ========================================================================= */
+  .qbox{border:1px solid var(--line); border-radius:10px; padding:12px; background:var(--surface-2); margin-bottom:10px}
   .qbox:last-child{margin-bottom:0}
-  .qbox .t{font-size:12px; font-weight:600; margin-bottom:7px; display:flex; align-items:center; gap:6px}
-  .dot{width:8px; height:8px; border-radius:50%; display:inline-block}
+  .qgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .qgrid.tight{grid-template-columns:repeat(2,minmax(0,240px))}
+  .qgrid.tight .inp{max-width:176px}
+  .qgrid .fld .lbl{font-size:var(--f2); color:var(--txt-2)}
+  .qbox .t{font-size:var(--f2); font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:6px}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block; flex:0 0 auto}
   .dot.g{background:var(--ok)}
   .dot.o{background:#e2542a}
   .qrow{display:flex; gap:6px; align-items:stretch}
   .qrow .inp{flex:1}
-  .qrow .unit{display:flex; align-items:center; padding:0 10px; border:1px solid var(--line); border-radius:9px;
-               background:#fff; color:var(--dim); font-size:12px; white-space:nowrap}
-  .qres{margin-top:8px; padding:8px 10px; border-radius:9px; background:#fff; border:1px dashed var(--line);
-        font-size:12.5px; min-height:34px; color:var(--muted)}
+  .qrow .unit{
+    display:flex; align-items:center; padding:0 11px; border:1px solid var(--line); border-radius:9px;
+    background:var(--surface); color:var(--txt-3); font-size:var(--f2); white-space:nowrap; min-height:38px;
+  }
+  .qres{
+    margin-top:8px; padding:9px 11px; border-radius:9px; background:var(--surface);
+    border:1px dashed var(--line-2); font-size:var(--f2); min-height:36px; color:var(--txt-2);
+  }
   .qres.good{border-style:solid; border-color:var(--ok-line); background:var(--ok-bg); color:var(--txt)}
   .qres.bad{border-color:var(--err-line); background:var(--err-bg); color:var(--err)}
   .qres .big{font-size:17px; font-weight:700; color:var(--accent)}
   .qres .big.o{color:#d1461f}
-  .qres .sub{font-size:11.5px; color:var(--dim)}
-  .qres .row2{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:2px 0; border-bottom:1px dashed #eef3fa}
+  .qres .sub{font-size:var(--f1); color:var(--txt-3)}
+  .qres .row2{
+    display:flex; justify-content:space-between; gap:10px; font-size:var(--f2);
+    padding:3px 0; border-bottom:1px dashed #e8eff7;
+  }
   .qres .row2:last-child{border-bottom:0}
-  .qres .row2 .nm{color:var(--muted)}
+  .qres .row2 .nm{color:var(--txt-2)}
   .qres .row2 .vv{font-weight:600; white-space:nowrap}
-  .swatch{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:1px}
+  .swatch{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:6px; vertical-align:1px}
 
   .chartwrap{position:relative; width:100%}
   .chartwrap svg{width:100%; height:auto; display:block; touch-action:none}
   #tip, #tipL, #tipD{
-    position:absolute; pointer-events:none; z-index:5; background:rgba(12,32,60,.95); color:#fff;
-    border-radius:9px; padding:7px 10px; font-size:12px; line-height:1.5; white-space:nowrap;
-    box-shadow:0 8px 20px rgba(9,25,48,.3); opacity:0; transition:opacity .1s;
+    position:absolute; pointer-events:none; z-index:5; background:rgba(12,32,60,.96); color:#fff;
+    border-radius:9px; padding:8px 11px; font-size:var(--f2); line-height:1.5; white-space:nowrap;
+    box-shadow:var(--sh3); opacity:0; transition:opacity .1s;
   }
-  #tip .tt, #tipL .tt, #tipD .tt{font-size:10.5px; color:#9fc0e8; letter-spacing:.3px}
-  #tip b, #tipL b, #tipD b{font-size:13px}
-  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:10px}
-  .legend .lg{cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:5px}
-  .legend .lg i{width:14px; height:3px; border-radius:2px; display:inline-block}
-  .legend .lg.off{opacity:.3; text-decoration:line-through}
+  #tip .tt, #tipL .tt, #tipD .tt{font-size:var(--f1); color:#a8c6ea; letter-spacing:.3px}
+  #tip b, #tipL b, #tipD b{font-size:var(--f3)}
+  .legend{display:flex; flex-wrap:wrap; gap:4px; margin-top:10px}
+  .legend .lg{
+    display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:var(--r-pill);
+    border:1px solid transparent; background:transparent; font:inherit; font-size:var(--f2);
+    color:var(--txt-2); cursor:pointer; transition:background .14s var(--ease), border-color .14s var(--ease);
+  }
+  .legend .lg:hover{background:var(--surface-3); border-color:var(--line)}
+  .legend .lg i{width:14px; height:3px; border-radius:2px; display:inline-block; flex:0 0 auto}
+  .legend .lg[aria-pressed="false"]{opacity:.45; text-decoration:line-through}
+  .legend .note{display:inline-flex; align-items:center; gap:6px; padding:5px 10px; font-size:var(--f1); color:var(--txt-3)}
+  .legend .note i{display:inline-block; height:0}
+  .chart-empty{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    min-height:180px; border:1px dashed var(--line-2); border-radius:10px; background:var(--surface-2);
+    color:var(--txt-3); font-size:var(--f2); text-align:center; padding:20px;
+  }
+  .chart-empty b{font-size:var(--f3); color:var(--txt-2); font-weight:600}
+  .chart-empty span{max-width:46ch; line-height:1.6}
+  .chart-scrollhint{display:none}
 
-  /* ===== 说明区 ===== */
-  details{border-top:1px dashed var(--line); padding-top:10px; margin-top:4px}
+  /* =========================================================================
+     说明区 / 表格内文本
+     ========================================================================= */
+  details{border-top:1px dashed var(--line); padding-top:10px; margin-top:6px}
   details:first-child{border-top:0; padding-top:0; margin-top:0}
-  summary{cursor:pointer; font-size:12.5px; color:var(--accent); font-weight:600; outline:none; list-style:none}
-  summary::before{content:"▸ "; color:var(--dim)}
-  details[open] summary::before{content:"▾ "}
-  details .body{padding-top:9px; font-size:12.5px; color:#3b5273; line-height:1.7}
-  .formula{
-    margin:8px 0; padding:9px 11px; background:#f7fafd; border-left:3px solid var(--accent);
-    border-radius:0 8px 8px 0; font-family:Consolas,"Cascadia Mono",monospace; font-size:12px;
-    overflow-x:auto; line-height:1.75;
+  summary{
+    cursor:pointer; font-size:var(--f2); color:var(--accent); font-weight:600;
+    list-style:none; display:flex; align-items:center; gap:6px;
   }
-  ul.notes{margin:6px 0 0; padding-left:18px; font-size:12px; color:#4c6484}
-  ul.notes li{margin:3px 0}
-  code{font-family:Consolas,monospace; background:#f1f5fb; padding:1px 5px; border-radius:5px; font-size:11.5px}
-
-  /* 选项卡 ② 的文本域与生成器 */
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸"; color:var(--txt-3); transition:transform .14s var(--ease)}
+  details[open] summary::before{transform:rotate(90deg)}
+  details .body{padding-top:10px; font-size:var(--f2); color:var(--txt-2); line-height:1.7}
+  .formula{
+    margin:8px 0; padding:10px 12px; background:var(--surface-2); border-left:3px solid var(--accent);
+    border-radius:0 8px 8px 0; font-family:Consolas,"Cascadia Mono",monospace; font-size:var(--f2);
+    overflow-x:auto; line-height:1.7; color:var(--txt-2);
+  }
+  ul.notes{margin:6px 0 0; padding-left:18px; font-size:var(--f2); color:var(--txt-2)}
+  ul.notes li{margin:4px 0}
+  code{font-family:Consolas,monospace; background:var(--surface-3); padding:1px 5px; border-radius:5px; font-size:var(--f1)}
   textarea{
     width:100%; min-height:150px; resize:vertical; border:1px solid var(--line); border-radius:9px;
-    background:#fbfcfe; color:var(--txt); font-family:Consolas,monospace; font-size:12px; line-height:1.7;
-    padding:8px 10px; outline:0;
+    background:#fbfcfe; color:var(--txt); font-family:Consolas,monospace; font-size:var(--f2); line-height:1.7;
+    padding:9px 11px; outline:0;
   }
+  textarea:hover{border-color:var(--line-2)}
   textarea:focus{border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(29,95,208,.12)}
-  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  #kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px}
-  #kpis .kpi{border:1px solid var(--line); border-radius:10px; background:#fafcff; padding:9px 11px}
-  #kpis .kpi .v{font-size:15px}
 
-  /* 沿厚度温度表 */
-  #depthTable .mark td{background:#fff6e5; color:#a1590a; font-weight:600}
-  #depthTable .iface td{background:#f7fafd; color:var(--muted)}
-  #depthTable .name{text-align:left}
-  .isosum{
-    margin:0 0 8px; font-size:12.5px; line-height:1.6; color:var(--txt);
-    background:var(--info-bg); border:1px solid var(--info-line); border-radius:9px; padding:8px 11px;
-  }
-  .isosum.warn{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
-
-  footer{max-width:1560px; margin:0 auto; padding:0 20px 34px; color:var(--dim); font-size:11.5px; line-height:1.6}
-  .foot-note{margin-bottom:5px}
-  .foot-meta{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--dim)}
+  /* =========================================================================
+     页脚 / 更新提示 / 轻提示 / 移动端操作条
+     ========================================================================= */
+  footer{max-width:1480px; margin:0 auto; padding:0 var(--s6) 34px; color:var(--txt-3); font-size:var(--f1); line-height:1.6}
+  .foot-note{margin-bottom:6px}
+  .foot-meta{display:flex; align-items:center; gap:8px; font-size:var(--f1); color:var(--txt-3); flex-wrap:wrap}
   .foot-meta .sep{opacity:.5}
-  .linkbtn{border:0; background:none; padding:0; color:var(--accent); font:inherit; font-size:11px;
-    cursor:pointer; text-decoration:underline; text-underline-offset:2px}
+  .linkbtn{
+    border:0; background:none; padding:0; color:var(--accent); font:inherit; font-size:var(--f1);
+    cursor:pointer; text-decoration:underline; text-underline-offset:2px;
+  }
   .linkbtn:hover{color:#0d3f8f}
 
-  /* 更新提示条 */
   .updbar{
     position:fixed; right:18px; bottom:18px; z-index:70; width:min(370px, calc(100vw - 36px));
-    background:#0f2f5c; color:#fff; border-radius:12px; padding:13px 15px;
-    font-size:12.5px; line-height:1.55; box-shadow:0 12px 32px rgba(9,25,48,.32);
-    animation:updIn .18s ease-out;
+    background:#0f2a4d; color:#fff; border-radius:var(--r2); padding:14px 16px;
+    font-size:var(--f2); line-height:1.55; box-shadow:var(--sh3);
+    animation:updIn .18s var(--ease);
   }
   @keyframes updIn{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
-  .updbar b{font-size:13.5px}
-  .updbar .udate{font-size:11.5px; opacity:.7}
-  .updbar .unotes{margin-top:5px; font-size:11.5px; opacity:.82; white-space:pre-wrap}
+  .updbar b{font-size:var(--f3)}
+  .updbar .udate{font-size:var(--f1); opacity:.72}
+  .updbar .unotes{margin-top:5px; font-size:var(--f1); opacity:.82; white-space:pre-wrap}
   .updbar .row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap}
-  .updbar .btn{border-color:rgba(255,255,255,.38); background:rgba(255,255,255,.14);
-    color:#fff; padding:5px 11px; font-size:12px; text-decoration:none}
+  .updbar .btn{border-color:rgba(255,255,255,.38); background:rgba(255,255,255,.14); color:#fff; padding:5px 11px; min-height:28px; font-size:var(--f2); text-decoration:none}
   .updbar .btn:hover{background:rgba(255,255,255,.28); color:#fff; border-color:#fff}
-  .updbar .btn.primary{background:#fff; color:#12336b; border-color:#fff}
-  .updbar .btn.primary:hover{background:#eaf1fb; color:#12336b}
+  .updbar .btn.primary{background:#fff; color:var(--accent-ink); border-color:#fff}
+  .updbar .btn.primary:hover{background:#eaf1fb; color:var(--accent-ink)}
 
-  /* ================= 报告样式（打印 / 导出共用） =================
-     这些规则放在媒体查询之外：屏幕下容器 #printReport 为 display:none 不可见；
-     导出 Word/PDF 时给同一个容器临时加 .rs-live（离屏、与 A4 版心等宽），
-     以便按打印布局测量并截图。打印与导出共用同一份 DOM 和样式，不会各自演进。 */
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translate(-50%,10px); z-index:90;
+    background:rgba(12,32,60,.96); color:#fff; font-size:var(--f2); padding:10px 16px; border-radius:10px;
+    box-shadow:var(--sh3); opacity:0; pointer-events:none; transition:opacity .18s var(--ease), transform .18s var(--ease);
+    max-width:calc(100vw - 40px);
+  }
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+  .toast.warn{background:#7a3b0b}
+  .toast.err{background:#7f1f1f}
+
+  .mobilebar{
+    display:none; position:fixed; left:0; right:0; bottom:0; z-index:40;
+    gap:8px; padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.96); border-top:1px solid var(--line);
+    box-shadow:0 -6px 20px rgba(16,38,72,.08); backdrop-filter:blur(6px);
+  }
+  .mobilebar .btn{flex:1; min-height:42px}
+
+  /* =========================================================================
+     滚动条
+     ========================================================================= */
+  .rail::-webkit-scrollbar, .panel-scroll::-webkit-scrollbar, .tablewrap::-webkit-scrollbar, .chartwrap::-webkit-scrollbar{width:9px; height:9px}
+  .rail::-webkit-scrollbar-thumb, .panel-scroll::-webkit-scrollbar-thumb,
+  .tablewrap::-webkit-scrollbar-thumb, .chartwrap::-webkit-scrollbar-thumb{
+    background:#c6d3e4; border-radius:9px; border:2px solid transparent; background-clip:content-box;
+  }
+  .rail::-webkit-scrollbar-thumb:hover, .panel-scroll::-webkit-scrollbar-thumb:hover{background:#a9bbd2; background-clip:content-box}
+
+  /* =========================================================================
+     报告样式（打印 / 导出共用）
+     注意：以下规则会被导出模块在运行期按前缀 "#printReport " 抽取并内嵌到
+     离屏 SVG 中，请勿修改选择器前缀、属性值或相对顺序。
+     ========================================================================= */
   #printReport{
     display:none; font-family:"SimSun","宋体","Songti SC",serif; color:#000;
     font-size:10.5pt; line-height:1.6;
@@ -334,99 +555,116 @@
     margin:0; padding:0; background:#fff; z-index:-1;
   }
 
-  /* ===== 导出菜单 / 轻提示 ===== */
-  .expwrap{position:relative; margin-left:8px}
-  .expbtn{font-size:12.5px; color:#fff; border-color:rgba(255,255,255,.45); background:rgba(255,255,255,.14)}
-  .expbtn:hover{background:rgba(255,255,255,.26); color:#fff; border-color:#fff}
-  .expmenu{
-    position:absolute; right:0; top:calc(100% + 8px); z-index:60; width:274px;
-    background:#fff; color:var(--txt); border:1px solid var(--line); border-radius:12px;
-    box-shadow:0 14px 34px rgba(12,39,73,.22); padding:5px; font-size:13px;
-  }
-  .expmenu[hidden]{display:none}
-  .expmenu button{
-    display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; border:0;
-    background:transparent; font:inherit; padding:9px 11px; border-radius:8px; cursor:pointer; color:inherit;
-  }
-  .expmenu button:hover{background:#f3f7fd}
-  .expmenu button:disabled{opacity:.5; cursor:progress}
-  .expmenu button b{font-size:13px; font-weight:600}
-  .expmenu button i{font-style:normal; font-size:11px; color:var(--dim); line-height:1.45}
-  .toast{
-    position:fixed; left:50%; bottom:26px; transform:translate(-50%,10px); z-index:90;
-    background:rgba(12,32,60,.95); color:#fff; font-size:12.5px; padding:9px 16px; border-radius:10px;
-    box-shadow:0 10px 26px rgba(9,25,48,.32); opacity:0; pointer-events:none;
-    transition:opacity .18s, transform .18s; max-width:calc(100vw - 40px);
-  }
-  .toast.show{opacity:1; transform:translate(-50%,0)}
-
+  /* =========================================================================
+     打印
+     ========================================================================= */
   @media print{
     /* 页边距设 0 可让浏览器不再打印自带的页眉页脚（URL、日期、页码），
        版心留白改由 #printReport 的 padding 提供 */
     @page{size:A4; margin:0}
     html,body{background:#fff !important; color:#000 !important}
     body{font-size:10.5pt; line-height:1.6}
-    .topbar, main, footer, #tip, .updbar, .expmenu, .toast{display:none !important}
+    .topbar, main, footer, #tip, #tipL, #tipD, .updbar, .expmenu, .toast, .skip, .mobilebar{display:none !important}
     #printReport{display:block !important; max-width:100%; overflow-x:hidden;
       padding:14mm 15mm 12mm}
   }
 
-  @media (max-width:1120px){
-    .workbench{grid-template-columns:330px minmax(0,1fr)}
-    .lgrid{grid-template-columns:repeat(2,1fr)}
+  /* =========================================================================
+     响应式
+     ========================================================================= */
+  @media (max-width:1200px){
+    .workbench{grid-template-columns:340px minmax(0,1fr); gap:18px}
   }
   @media (max-width:980px){
-    .workbench{grid-template-columns:1fr; padding:12px}
-    .rail{position:static; max-height:none; overflow:visible}
-    .kpis{grid-template-columns:repeat(2,1fr)}
-    .kpi:nth-child(2){border-right:0}
+    .workbench{display:flex; flex-direction:column; padding:14px; gap:16px; max-width:none}
+    .stage{order:1; width:100%}
+    .rail{order:2; position:static; max-height:none; overflow:visible; width:100%; padding-right:0}
+    .mobilebar{display:flex}
+    body{padding-bottom:64px}
+    .topbar{height:auto; min-height:var(--topbar-h); padding:8px 12px; gap:8px; flex-wrap:wrap}
     .brand span{display:none}
-    .topbar{padding:6px 10px; gap:6px; min-height:0}
-    .brand b{font-size:15px}
-    .printbtn{order:2; margin-left:auto; padding:5px 9px; font-size:11.5px}
-    .expwrap{order:2; margin-left:6px}
-    .expbtn{padding:5px 8px; font-size:11.5px}
-    .expmenu{width:min(274px, calc(100vw - 22px))}
+    .brand b{font-size:var(--f4)}
+    .actions{margin-left:auto}
+    .actions .btn{font-size:var(--f1); padding:6px 10px}
     .tabs{order:3; margin-left:0; width:100%; padding:3px}
-    .tab{flex:1; text-align:center; padding:6px 8px; font-size:12.5px}
+    .tab{flex:1; text-align:center; padding:7px 8px; font-size:var(--f2)}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .kpi{border-bottom:1px solid var(--line)}
+    .kpi:nth-child(2n){border-right:0}
+    .kpi:nth-child(n+3){border-bottom:0}
+    .btn{min-height:40px}
+    .inp, .qrow .unit{min-height:42px}
+    .panel-scroll{max-height:50vh}
+    .card{padding:14px}
+  }
+  @media (max-width:760px){
+    .qgrid, .qgrid.tight{grid-template-columns:1fr}
+    .chartwrap{overflow-x:auto; -webkit-overflow-scrolling:touch}
+    .chartwrap svg{min-width:720px}
+    .chart-scrollhint{display:block; margin-top:6px; font-size:var(--f1); color:var(--txt-3)}
+    .only-mobile{display:block !important}
+    .summary{grid-template-columns:repeat(2,1fr)}
   }
   @media (max-width:560px){
-    .hero .val{font-size:38px}
+    .hero{padding:16px}
+    .hero .val{font-size:36px}
     .grid2{grid-template-columns:1fr}
     .lgrid{grid-template-columns:1fr 1fr}
     .qrow{flex-wrap:wrap}
+    .card-hd{flex-wrap:wrap}
   }
+
 </style>
 </head>
 <body>
 
+<a class="skip" href="#main">跳到计算结果</a>
+
 <header class="topbar">
-  <div class="brand"><b>耐火材料温度计算器</b><span>炉衬外壁温度 · 降温曲线</span></div>
-  <nav class="tabs" role="tablist">
-    <button class="tab active" type="button" data-panel="panelSteady">① 稳态计算</button>
-    <button class="tab" type="button" data-panel="panelCurve">② 降温曲线</button>
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="bmGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#8ad4ff"/><stop offset=".55" stop-color="#4f96ff"/><stop offset="1" stop-color="#3ed6b8"/>
+        </linearGradient>
+      </defs>
+      <rect x="1.6" y="1.6" width="20.8" height="20.8" rx="6" fill="url(#bmGrad)" opacity=".16"/>
+      <rect x="1.6" y="1.6" width="20.8" height="20.8" rx="6" fill="none" stroke="url(#bmGrad)" stroke-width="1.3"/>
+      <path d="M6 15.6c2.6 0 3.4-7.2 6-7.2s3.4 7.2 6 7.2" fill="none" stroke="url(#bmGrad)" stroke-width="1.7" stroke-linecap="round"/>
+    </svg>
+    <b>耐火材料温度计算器</b><span>炉衬外壁温度 · 降温曲线</span>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="计算模块">
+    <button class="tab active" id="tabSteady" type="button" role="tab" aria-selected="true"
+            aria-controls="panelSteady" data-panel="panelSteady">① 稳态计算</button>
+    <button class="tab" id="tabCurve" type="button" role="tab" aria-selected="false" tabindex="-1"
+            aria-controls="panelCurve" data-panel="panelCurve">② 降温曲线</button>
   </nav>
-  <button class="btn printbtn" id="printBtn" type="button" title="生成黑白计算报告并调用浏览器打印（Ctrl+P 同样有效）">打印报告</button>
-  <div class="expwrap" id="expWrap">
-    <button class="btn expbtn" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false"
-            title="把与打印完全相同内容的报告导出为 Word 或 PDF 文件">导出 ▾</button>
-    <div class="expmenu" id="exportMenu" role="menu" hidden>
-      <button type="button" role="menuitem" data-export="docx">
-        <b>导出 Word（.docx）</b><i>黑白 A4 版式，可在 Word 里继续编辑、加批注</i>
-      </button>
-      <button type="button" role="menuitem" data-export="pdf">
-        <b>导出 PDF（.pdf）</b><i>直接下载，无需打印机；图片型 PDF，换机也不会乱码</i>
-      </button>
-      <button type="button" role="menuitem" data-export="print">
-        <b>打印 / 另存为 PDF</b><i>交给浏览器打印，可选可选中文字的矢量 PDF</i>
-      </button>
+  <div class="actions">
+    <div class="actiongroup">
+      <button class="btn" id="printBtn" type="button" title="生成黑白计算报告并调用浏览器打印（Ctrl+P 同样有效）">打印报告</button>
+      <div class="expwrap" id="expWrap">
+        <button class="btn" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false"
+                title="把与打印完全相同内容的报告导出为 Word 或 PDF 文件">导出 ▾</button>
+        <div class="expmenu" id="exportMenu" role="menu" hidden>
+          <button type="button" role="menuitem" data-export="docx">
+            <b>导出 Word（.docx）</b><i>黑白 A4 版式，可在 Word 里继续编辑、加批注</i>
+          </button>
+          <button type="button" role="menuitem" data-export="pdf">
+            <b>导出 PDF（.pdf）</b><i>直接下载，无需打印机；图片型 PDF，换机也不会乱码</i>
+          </button>
+          <button type="button" role="menuitem" data-export="print">
+            <b>打印 / 另存为 PDF</b><i>交给浏览器打印，可选可选中文字的矢量 PDF</i>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </header>
 
-<main>
+<main id="main" tabindex="-1">
   <!-- ================= 选项卡 ① ================= -->
-  <div class="panel" id="panelSteady">
+  <div class="panel" id="panelSteady" role="tabpanel" aria-labelledby="tabSteady" tabindex="-1">
     <div class="workbench">
 
       <!-- 左：参数栏 -->
@@ -490,7 +728,10 @@
         </section>
 
         <section class="card">
-          <h2>炉衬层 <small>由内向外</small></h2>
+          <div class="card-hd">
+            <h2>炉衬层 <small>由内向外</small></h2>
+            <div class="card-act"><span class="chip" id="layerChip">—</span></div>
+          </div>
           <div id="layerBody" class="layers"></div>
           <div class="row-actions">
             <button class="btn" id="addLayer" type="button">＋ 添加一层</button>
@@ -509,6 +750,7 @@
             <div>
               <div class="lbl">外表面温度 T_out</div>
               <div class="val"><span id="tOut">—</span><span class="u">°C</span></div>
+              <div class="status-pill" id="heroStatus" hidden></div>
             </div>
             <div class="side" id="heroSide"></div>
           </div>
@@ -521,7 +763,12 @@
         </section>
 
         <section class="card">
-          <h2>逐层温度分布 <button class="btn ghost mini" id="copyBtn" type="button" title="把当前结果复制为文本">复制结果</button></h2>
+          <div class="card-hd">
+            <h2>逐层温度分布</h2>
+            <div class="card-act">
+              <button class="btn ghost mini" id="copyBtn" type="button" title="把当前结果复制为文本">复制结果</button>
+            </div>
+          </div>
           <div class="tablewrap">
             <table id="resTable">
               <thead>
@@ -533,13 +780,18 @@
         </section>
 
         <section class="card">
-          <h2>沿厚度温度表 <small>标出目标温度的深度</small></h2>
-          <div class="row-actions" style="margin:0 0 9px">
-            <label class="fld inlineRow" style="flex:1">
+          <div class="card-hd">
+            <h2>沿厚度温度表 <small>标出目标温度的深度</small></h2>
+            <div class="card-act">
+              <button class="btn ghost mini" id="copyTableBtn" type="button" title="按 TSV 复制表格，可直接粘贴到 Excel">复制表格</button>
+            </div>
+          </div>
+          <div class="qgrid tight" style="margin-bottom:12px">
+            <div class="fld">
               <span class="lbl">目标温度</span>
               <span class="inp"><input type="number" id="tMark" value="660" step="10"><i>°C</i></span>
-            </label>
-            <label class="fld inlineRow" style="flex:1">
+            </div>
+            <div class="fld">
               <span class="lbl">行距</span>
               <span class="inp"><select id="tStep">
                 <option value="5">5 mm</option>
@@ -548,16 +800,20 @@
                 <option value="25">25 mm</option>
                 <option value="50">50 mm</option>
               </select></span>
-            </label>
+            </div>
           </div>
           <div class="isosum" id="tMarkSum">—</div>
-          <div class="tablewrap">
+          <div class="panel-scroll">
             <table id="depthTable">
               <thead>
                 <tr><th>距内表面 (mm)</th><th>温度 (°C)</th><th>所在层</th><th>说明</th></tr>
               </thead>
               <tbody id="depthBody"></tbody>
             </table>
+          </div>
+          <div class="panel-foot">
+            <span id="depthFoot">—</span>
+            <span class="muted">↕ 表格可滚动</span>
           </div>
           <div class="hint">稳态工况下，层内 λ 按该层平均温度取定值，故平面壁温度随厚度线性变化、圆筒壁随 ln(r/r₁) 变化；表格数值与上方逐层表完全自洽。行距越小表越长（5 mm 最细）；改「目标温度」可标出任意等温线位置（660 °C 常用于判断某些耐火材料是否在工作温度内）。</div>
         </section>
@@ -599,7 +855,7 @@ h_rad = ε·σ·(T_s⁴ − T∞⁴) / (T_s − T∞)，σ = 5.67×10⁻⁸</div
   </div>
 
   <!-- ================= 选项卡 ② ================= -->
-  <div class="panel hidden" id="panelCurve">
+  <div class="panel hidden" id="panelCurve" role="tabpanel" aria-labelledby="tabCurve" tabindex="-1">
     <div class="workbench">
 
       <aside class="rail">
@@ -684,10 +940,9 @@ h_rad = ε·σ·(T_s⁴ − T∞⁴) / (T_s − T∞)，σ = 5.67×10⁻⁸</div
           </div>
         </section>
         <section class="card">
-          <h2>数据概览</h2>
-          <div class="kpis" id="kpis"></div>
-          <details style="margin-top:10px">
-            <summary>瞬态计算模型与说明</summary>
+          <h2>瞬态模型与说明</h2>
+          <details>
+            <summary>计算模型、假设与查询口径</summary>
             <div class="body">
               <p><b>同步模式（瞬态导热）：</b>把选项卡 ① 算出的稳态温度场作为 t = 0 的初始条件，用一维瞬态导热方程做有限体积离散，时间方向取 Crank-Nicolson 隐式格式（Thomas 追赶法）：</p>
               <div class="formula">平面壁：ρc ∂T/∂t = ∂/∂x ( λ(T) ∂T/∂x )<br>
@@ -710,65 +965,88 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       </aside>
 
       <section class="stage">
-        <section class="card qcard">
-          <h2>双向查询</h2>
-          <div class="qbox">
-            <div class="t"><span class="dot g"></span>按时间 → 查温度</div>
-            <div class="qrow">
-              <span class="inp"><input type="number" id="qTime" step="0.1" placeholder="例如 5.5"></span>
-              <span class="unit" id="unitTag1">h</span>
+        <section class="card">
+          <div class="card-hd">
+            <h2>曲线概览</h2>
+            <div class="card-act"><span class="muted" id="ovHint">同步模式下随选项卡 ① 实时更新</span></div>
+          </div>
+          <div class="summary" id="kpis"></div>
+          <div id="kMsgs" style="margin-top:10px"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-hd">
+            <h2>温度随时间变化 <small>各界面</small></h2>
+          </div>
+          <div class="chartwrap" id="chartWrap"><div id="tip"></div></div>
+          <div class="chart-scrollhint">↔ 左右滑动查看完整曲线</div>
+          <div class="legend" id="kLegend"></div>
+          <div class="qbox" style="margin-top:12px">
+            <div class="qgrid">
+              <div class="fld">
+                <span class="lbl">按时间 → 查各界面温度</span>
+                <div class="qrow">
+                  <span class="inp"><input type="number" id="qTime" step="0.1" placeholder="例如 5.5"></span>
+                  <span class="unit" id="unitTag1">h</span>
+                </div>
+              </div>
+              <div class="fld">
+                <span class="lbl">按温度 → 查降到该温度的时间</span>
+                <div class="qrow">
+                  <span class="inp"><input type="number" id="qTemp" step="1" placeholder="例如 60"></span>
+                  <span class="unit">°C</span>
+                </div>
+              </div>
             </div>
             <div class="qres" id="resTime">请输入时间，或把鼠标移到曲线上查看。</div>
-          </div>
-          <div class="qbox">
-            <div class="t"><span class="dot o"></span>按温度 → 查时间</div>
-            <div class="qrow">
-              <span class="inp"><input type="number" id="qTemp" step="1" placeholder="例如 60"></span>
-              <span class="unit">°C</span>
-            </div>
             <div class="qres" id="resTemp">输入温度，查询降到该温度所需的时间。</div>
           </div>
-          <div id="kMsgs"></div>
-          <div class="hint">在图上单击可把该处时间填入查询框；点击图例可隐藏／显示曲线。</div>
+          <p class="hint" style="margin-bottom:0">在图上单击可把该处时间填入查询框；点击图例可隐藏／显示曲线。</p>
         </section>
 
         <section class="card">
-          <h2>温度随时间变化</h2>
-          <div class="chartwrap" id="chartWrap"><div id="tip"></div></div>
-          <div class="legend" id="kLegend"></div>
-        </section>
-
-        <section class="card">
-          <h2>温度分布曲线<small>温度—厚度 · 不同停炉时刻</small></h2>
+          <div class="card-hd">
+            <h2>温度分布曲线 <small>温度—厚度 · 不同停炉时刻</small></h2>
+          </div>
           <div class="chartwrap" id="depthWrap"><div id="tipD"></div></div>
+          <div class="chart-scrollhint">↔ 左右滑动查看完整曲线</div>
           <div class="legend" id="dLegend"></div>
-          <div class="qbox" style="margin-top:10px">
-            <div class="t"><span class="dot g"></span>按厚度 → 查该处温度</div>
-            <div class="qrow">
-              <span class="inp"><input type="number" id="qDepth" step="1" placeholder="例如 120"></span>
-              <span class="unit">mm</span>
+          <div class="qbox" style="margin-top:12px">
+            <div class="qgrid">
+              <div class="fld">
+                <span class="lbl">按厚度 → 查该处温度</span>
+                <div class="qrow">
+                  <span class="inp"><input type="number" id="qDepth" step="1" placeholder="例如 120"></span>
+                  <span class="unit">mm</span>
+                </div>
+              </div>
             </div>
             <div class="qres" id="resDepth">输入厚度（如 120 mm），查看该处停炉后各时刻的温度。</div>
           </div>
-          <div class="hint">横轴为距内表面的厚度：左端内表面、右端外表面；每条曲线对应一个停炉时刻。鼠标悬停看该厚度处各时刻温度，点击曲线可把厚度填入查询框。</div>
+          <p class="hint" style="margin-bottom:0">横轴为距内表面的厚度：左端内表面、右端外表面；每条曲线对应一个停炉时刻。鼠标悬停看该厚度处各时刻温度，点击曲线可把厚度填入查询框。</p>
         </section>
 
         <section class="card">
-          <h2>层温曲线<small>各层平均温度随时间变化</small></h2>
+          <div class="card-hd">
+            <h2>层温曲线 <small>各层平均温度随时间变化</small></h2>
+          </div>
           <div class="chartwrap" id="layerWrap"><div id="tipL"></div></div>
+          <div class="chart-scrollhint">↔ 左右滑动查看完整曲线</div>
           <div class="legend" id="lLegend"></div>
-          <div class="qbox" style="margin-top:10px">
-            <div class="t"><span class="dot g"></span>按时间 → 查各层平均温度</div>
-            <div class="qrow">
-              <span class="inp"><input type="number" id="qLayerTime" step="0.1" placeholder="例如 4"></span>
-              <span class="unit" id="lUnitTag">h</span>
+          <div class="qbox" style="margin-top:12px">
+            <div class="qgrid">
+              <div class="fld">
+                <span class="lbl">按时间 → 查各层平均温度</span>
+                <div class="qrow">
+                  <span class="inp"><input type="number" id="qLayerTime" step="0.1" placeholder="例如 4"></span>
+                  <span class="unit" id="lUnitTag">h</span>
+                </div>
+              </div>
             </div>
             <div class="qres" id="resLayer">输入时间（如第 4 小时），查看该时刻每一层的平均温度。</div>
           </div>
-          <div class="hint">层温 = 该层沿厚度（圆筒沿半径）的平均温度，比外表面滞后；鼠标移到曲线上可看该时刻各层温度，点击曲线可把时间填入查询框。</div>
+          <p class="hint" style="margin-bottom:0">层温 = 该层沿厚度（圆筒沿半径）的平均温度，比外表面滞后；鼠标移到曲线上可看该时刻各层温度，点击曲线可把时间填入查询框。</p>
         </section>
-
-        
       </section>
     </div>
   </div>
@@ -784,6 +1062,10 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     <button class="linkbtn" id="checkUpd" type="button">检查更新</button>
   </div>
 </footer>
+<div class="mobilebar" id="mobilebar">
+  <button class="btn ghost" type="button" id="mbParams">参数设置</button>
+  <button class="btn primary" type="button" id="mbReport">报告 / 导出</button>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -849,14 +1131,14 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     tr.className = "lrow";
     tr.innerHTML =
       '<div class="lhead"><input class="lname" type="text" placeholder="层名称" value="' + esc(data.name) + '">' +
-      '<button class="btn danger" type="button" title="删除该层">×</button></div>' +
+      '<button class="btn danger" type="button" title="删除该层" aria-label="删除该层">×</button></div>' +
       '<div class="lgrid">' +
-        '<label>δ<i>mm</i><input class="ld" type="number" step="1" min="0" value="' + data.d + '"></label>' +
-        '<label>λ₀<i>W/m·K</i><input class="ll0" type="number" step="0.01" min="0" value="' + data.l0 + '"></label>' +
-        '<label>b<i>W/m·K²</i><input class="lb" type="number" step="0.0001" value="' + data.b + '"></label>' +
-        '<label>ρ<i>kg/m³</i><input class="lrho" type="number" step="10" min="1" value="' + data.rho + '"></label>' +
-        '<label>c<i>J/kg·K</i><input class="lc" type="number" step="10" min="1" value="' + data.c + '"></label>' +
-        '<label class="presetWrap"><select class="lpreset">' + presetOptions(data.preset) + '</select></label>' +
+        '<label class="lf"><span>厚度 δ<i>mm</i></span><input class="ld" type="number" step="1" min="0" value="' + data.d + '"></label>' +
+        '<label class="lf"><span>密度 ρ<i>kg/m³</i></span><input class="lrho" type="number" step="10" min="1" value="' + data.rho + '"></label>' +
+        '<label class="lf"><span>导热系数 λ₀<i>W/(m·K)</i></span><input class="ll0" type="number" step="0.01" min="0" value="' + data.l0 + '"></label>' +
+        '<label class="lf"><span>温度系数 b<i>W/(m·K²)</i></span><input class="lb" type="number" step="0.0001" value="' + data.b + '"></label>' +
+        '<label class="lf"><span>比热 c<i>J/(kg·K)</i></span><input class="lc" type="number" step="10" min="1" value="' + data.c + '"></label>' +
+        '<label class="lf presetWrap"><span>材料预设<i>选中自动填 λ₀ / b / ρ / c</i></span><select class="lpreset">' + presetOptions(data.preset) + '</select></label>' +
       '</div>';
     body.appendChild(tr);
 
@@ -873,7 +1155,10 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       compute();
     });
     tr.querySelector(".danger").addEventListener("click", function(){
-      if(body.querySelectorAll(".lrow").length <= 1){ alert("至少保留一层材料"); return; }
+      if(body.querySelectorAll(".lrow").length <= 1){
+        if(window.UI) UI.toast("至少保留一层材料", "warn");
+        return;
+      }
       tr.remove();
       compute();
     });
@@ -1054,6 +1339,19 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
   /* ---------------- 渲染 ---------------- */
   var lastResult = null;
 
+  function setHeroStatus(r){
+    var el = $("#heroStatus");
+    if(!el) return;
+    if(!r || !r.ok){ el.hidden = true; el.className = "status-pill"; el.textContent = ""; return; }
+    var t = r.tOut, cls = "ok", txt = "接触安全";
+    if(t > 60){ cls = "err"; txt = "烫伤风险 · 超 GB/T 3486"; }
+    else if(t > 50){ cls = "warn"; txt = "超 GB/T 3486 限值"; }
+    else if(!(t >= 0)){ cls = "warn"; txt = "外表面低于 0 °C"; }
+    el.hidden = false;
+    el.className = "status-pill " + cls;
+    el.textContent = txt;
+  }
+
   function render(){
     var r = calculate();
     var msgs = $("#msgs");
@@ -1066,6 +1364,8 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       }).join("");
       $("#tOut").textContent = "—";
       $("#heroSide").innerHTML = "";
+      setHeroStatus(null);
+      $("#layerChip").textContent = "—";
       $("#qVal").textContent = "—";
       $("#rVal").textContent = "—";
       $("#tInSurf").textContent = "—";
@@ -1084,8 +1384,12 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
 
     $("#tOut").textContent = fmt(r.tOut, 1);
     $("#heroSide").innerHTML =
-      "温降 " + fmt(r.tInnerSurf - r.tOut, 1) + " °C<br>" +
-      (r.hOutAuto ? "h₂ 自动 ≈ " + fmt(r.hOut, 1) : "迭代 " + r.iters + " 次（λ 随温度修正）");
+      '<span class="chip">温降 <b>' + fmt(r.tInnerSurf - r.tOut, 1) + ' °C</b></span>' +
+      (r.hOutAuto
+        ? '<span class="chip">h₂ 自动 <b>' + fmt(r.hOut, 1) + '</b></span>'
+        : '<span class="chip">λ 迭代 <b>' + r.iters + '</b> 次</span>');
+    setHeroStatus(r);
+    $("#layerChip").textContent = r.layers.length + " 层 · " + fmt(r.totalThk, 0) + " mm";
 
     $("#qVal").textContent = fmt(r.q, 1);
     $("#rVal").textContent = fmt(r.Rtot, 4);
@@ -1227,6 +1531,7 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       body.innerHTML = "";
       sum.className = "isosum";
       sum.textContent = "—";
+      var f0 = $("#depthFoot"); if(f0) f0.textContent = "—";
       return;
     }
     var tMark = parseFloat($("#tMark").value);
@@ -1272,6 +1577,11 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       sum.innerHTML = "<b>" + fmt(tMark, 0) + " °C</b> 不在本工况温度范围内（内表面 " + fmt(r.tInnerSurf, 1) +
         " °C、外表面 " + fmt(r.tOut, 1) + " °C），没有对应的等温线。";
     }
+    var foot = $("#depthFoot");
+    if(foot){
+      foot.textContent = "共 " + xsSet.length + " 行 · 行距 " + fmt(step, 0) + " mm · 总厚 " + fmt(total, 0) + " mm" +
+        (hit ? " · ★ " + fmt(tMark, 0) + " °C" : "");
+    }
   }
 
   /* ---------------- 对外同步接口（供选项卡 ② 的瞬态降温计算使用） ---------------- */
@@ -1313,10 +1623,15 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
     addRow({name:"", d:100, l0:0.5, b:0, rho:2000, c:1000, preset:""});
     compute();
   });
-  $("#resetAll").addEventListener("click", setDefaults);
+  $("#resetAll").addEventListener("click", function(){
+    if(window.UI && UI.confirm2)
+      UI.confirm2(this, "确认恢复默认？", setDefaults);
+    else
+      setDefaults();
+  });
 
   $("#copyBtn").addEventListener("click", function(){
-    if(!lastResult){ alert("暂无可复制的结果"); return; }
+    if(!lastResult){ if(window.UI) UI.toast("暂无可复制的结果", "warn"); return; }
     var r = lastResult;
     var lines = [];
     lines.push("耐火材料外壁温度计算");
@@ -1335,7 +1650,7 @@ Crank-Nicolson 无条件稳定；离散格式已用能量守恒校核（偏差 0
       lines.push("  " + L.name + ": " + fmt(r.surf[i], 1) + " → " + fmt(r.surf[i+1], 1) + " °C");
     });
     var txt = lines.join("\n");
-    function done(okMsg){ var b = $("#copyBtn"); var old = b.textContent; b.textContent = okMsg; setTimeout(function(){ b.textContent = old; }, 1400); }
+    function done(okMsg){ if(window.UI) UI.toast(okMsg); }
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(txt).then(function(){ done("已复制 ✓"); }, function(){ fallback(txt, done); });
     } else { fallback(txt, done); }
@@ -1936,9 +2251,10 @@ function solveTransient(cfg){
   function draw(){
     var vis = visible();
     if(!vis.length){
-      wrap.innerHTML = '<div id="tip"></div><div class="hint" style="padding:60px 10px;text-align:center">' +
-        (currentMode() === "sync" ? "选项卡 ① 参数有效后这里会自动出现各界面降温曲线" : "请在上方输入数据，或点击「载入示例数据」") +
-        '</div>';
+      wrap.innerHTML = '<div id="tip"></div><div class="chart-empty">' +
+        '<b>暂无曲线</b><span>' +
+        (currentMode() === "sync" ? "选项卡 ① 参数有效后，这里会自动出现各界面降温曲线" : "请在上方输入数据，或点击「载入示例数据」") +
+        '</span></div>';
       tip = $("#tip");
       renderLegend();
       return;
@@ -1947,38 +2263,27 @@ function solveTransient(cfg){
     var u = unitText();
     var multi = vis.length > 1;
     var s = [];
-    s.push('<svg id="kChart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="' + SVGNS + '">');
-    s.push('<defs><linearGradient id="gAreaK" x1="0" y1="0" x2="0" y2="1">' +
-           '<stop offset="0%" stop-color="#1d5fd0" stop-opacity="0.20"/>' +
-           '<stop offset="100%" stop-color="#1d5fd0" stop-opacity="0.01"/></linearGradient></defs>');
+    /* 说明：曾用于单曲线的面积填充已移除（同步模式恒为多曲线），保持三图视觉一致 */
+    s.push('<svg id="kChart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="' + SVGNS + '"' +
+           ' role="img" aria-label="各界面温度随时间变化曲线">');
     s.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#fff"/>');
 
     ticks(view.Tmin, view.Tmax, 6).forEach(function(T){
       var y = Y(T);
-      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#edf2f9"/>');
-      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#8697ab">' +
+      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#eef3fa"/>');
+      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#5b6d84">' +
              (Math.abs(T) >= 100 ? T.toFixed(0) : T.toFixed(1)) + '</text>');
     });
     ticks(view.tmin, view.tmax, 7).forEach(function(t){
       var x = X(t);
-      s.push('<line x1="' + x.toFixed(1) + '" y1="' + mT + '" x2="' + x.toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#f2f6fc"/>');
-      s.push('<text x="' + x.toFixed(1) + '" y="' + (mT + ph + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + mT + '" x2="' + x.toFixed(1) + '" y2="' + (mT + ph) + '" stroke="#f4f8fc"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (mT + ph + 18) + '" text-anchor="middle" font-size="11.5" fill="#5b6d84">' +
              (Math.abs(t) >= 100 ? t.toFixed(0) : t.toFixed(1)) + '</text>');
     });
-    s.push('<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (mL + pw) + '" y2="' + (mT + ph) + '" stroke="#c9d8ea"/>');
-    s.push('<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + ph) + '" stroke="#c9d8ea"/>');
-    s.push('<text x="' + (mL + pw / 2) + '" y="' + (H - 13) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">时间 (' + esc(u) + ')</text>');
-    s.push('<text x="17" y="' + (mT + ph / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' + (mT + ph / 2) + ')">温度 (°C)</text>');
-
-    // 面积（仅单曲线时）
-    if(!multi){
-      var sp = vis[0].pts;
-      if(sp.length > 1){
-        var dA = sp.map(function(p, i){ return (i ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.T).toFixed(1); }).join(" ");
-        s.push('<path d="' + dA + ' L' + X(sp[sp.length - 1].t).toFixed(1) + ' ' + (mT + ph) +
-               ' L' + X(sp[0].t).toFixed(1) + ' ' + (mT + ph) + ' Z" fill="url(#gAreaK)" stroke="none"/>');
-      }
-    }
+    s.push('<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (mL + pw) + '" y2="' + (mT + ph) + '" stroke="#cfdaea"/>');
+    s.push('<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + ph) + '" stroke="#cfdaea"/>');
+    s.push('<text x="' + (mL + pw / 2) + '" y="' + (H - 13) + '" text-anchor="middle" font-size="12.5" fill="#465a72">时间 (' + esc(u) + ')</text>');
+    s.push('<text x="17" y="' + (mT + ph / 2) + '" text-anchor="middle" font-size="12.5" fill="#465a72" transform="rotate(-90 17 ' + (mT + ph / 2) + ')">温度 (°C)</text>');
 
     // 各条曲线
     vis.forEach(function(sr){
@@ -2054,13 +2359,15 @@ function solveTransient(cfg){
     var vis = visible();
     var el = $("#kLegend");
     if(!series.length){
-      el.innerHTML = '<span style="color:#8697ab">暂无曲线</span>';
+      el.innerHTML = '<span class="note">暂无曲线</span>';
       return;
     }
     el.innerHTML = series.map(function(s, i){
-      return '<span class="lg' + (s.visible ? "" : " off") + '" data-i="' + i + '">' +
-             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>';
-    }).join("") + (Number.isFinite(envT) ? '<span><i style="background:#9dc3ee;height:0;border-top:3px dashed #9dc3ee"></i>环境 ' + fmt(envT, 0) + ' °C</span>' : '');
+      return '<button class="lg" type="button" aria-pressed="' + (s.visible ? "true" : "false") + '" data-i="' + i + '">' +
+             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</button>';
+    }).join("") + (Number.isFinite(envT)
+      ? '<span class="note"><i style="width:14px;border-top:3px dashed #9dc3ee"></i>环境 ' + fmt(envT, 0) + ' °C（参考）</span>'
+      : '');
     Array.prototype.forEach.call(el.querySelectorAll(".lg"), function(node){
       node.addEventListener("click", function(){
         var i = +node.getAttribute("data-i");
@@ -2161,12 +2468,12 @@ function solveTransient(cfg){
     var el = $("#lLegend");
     if(!el) return;
     if(!layerSeries.length){
-      el.innerHTML = '<span style="color:#8697ab">暂无分层数据</span>';
+      el.innerHTML = '<span class="note">暂无分层数据</span>';
       return;
     }
     el.innerHTML = layerSeries.map(function(s, i){
-      return '<span class="lg' + (s.visible ? "" : " off") + '" data-i="' + i + '">' +
-             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>';
+      return '<button class="lg" type="button" aria-pressed="' + (s.visible ? "true" : "false") + '" data-i="' + i + '">' +
+             '<i style="background:' + s.color + '"></i>' + esc(s.name) + '</button>';
     }).join("");
     Array.prototype.forEach.call(el.querySelectorAll(".lg"), function(node){
       node.addEventListener("click", function(){
@@ -2182,11 +2489,11 @@ function solveTransient(cfg){
     if(!lwrap) return;
     var vis = lvisible();
     if(!vis.length){
-      lwrap.innerHTML = '<div id="tipL"></div><div class="hint" style="padding:46px 10px;text-align:center">' +
+      lwrap.innerHTML = '<div id="tipL"></div><div class="chart-empty"><b>暂无分层数据</b><span>' +
         (currentMode() === "sync"
           ? "选项卡 ① 参数有效后，这里会显示「各层平均温度」随时间的降温曲线"
           : "手动输入模式下没有分层数据；把数据来源切回「由稳态计算同步」即可看到") +
-        '</div>';
+        '</span></div>';
       ltip = $("#tipL");
       renderLLegend();
       return;
@@ -2209,24 +2516,25 @@ function solveTransient(cfg){
 
     var u = unitText();
     var s = [];
-    s.push('<svg id="lChart" viewBox="0 0 ' + W + ' ' + LH + '" xmlns="' + SVGNS + '">');
+    s.push('<svg id="lChart" viewBox="0 0 ' + W + ' ' + LH + '" xmlns="' + SVGNS + '"' +
+           ' role="img" aria-label="各层平均温度随时间变化曲线">');
     s.push('<rect x="0" y="0" width="' + W + '" height="' + LH + '" fill="#fff"/>');
     ticks(Tmin, Tmax, 5).forEach(function(T){
       var y = lY(T);
-      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#edf2f9"/>');
-      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#8697ab">' +
+      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#eef3fa"/>');
+      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#5b6d84">' +
              (Math.abs(T) >= 100 ? T.toFixed(0) : T.toFixed(1)) + '</text>');
     });
     ticks(tmin, tmax, 7).forEach(function(t){
       var x = lX(t);
-      s.push('<line x1="' + x.toFixed(1) + '" y1="' + LmT + '" x2="' + x.toFixed(1) + '" y2="' + (LmT + lpH) + '" stroke="#f2f6fc"/>');
-      s.push('<text x="' + x.toFixed(1) + '" y="' + (LmT + lpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + LmT + '" x2="' + x.toFixed(1) + '" y2="' + (LmT + lpH) + '" stroke="#f4f8fc"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (LmT + lpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#5b6d84">' +
              (Math.abs(t) >= 100 ? t.toFixed(0) : t.toFixed(1)) + '</text>');
     });
-    s.push('<line x1="' + mL + '" y1="' + (LmT + lpH) + '" x2="' + (mL + pw) + '" y2="' + (LmT + lpH) + '" stroke="#c9d8ea"/>');
-    s.push('<line x1="' + mL + '" y1="' + LmT + '" x2="' + mL + '" y2="' + (LmT + lpH) + '" stroke="#c9d8ea"/>');
-    s.push('<text x="' + (mL + pw / 2) + '" y="' + (LH - 14) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">时间 (' + esc(u) + ')</text>');
-    s.push('<text x="17" y="' + (LmT + lpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' + (LmT + lpH / 2) + ')">层平均温度 (°C)</text>');
+    s.push('<line x1="' + mL + '" y1="' + (LmT + lpH) + '" x2="' + (mL + pw) + '" y2="' + (LmT + lpH) + '" stroke="#cfdaea"/>');
+    s.push('<line x1="' + mL + '" y1="' + LmT + '" x2="' + mL + '" y2="' + (LmT + lpH) + '" stroke="#cfdaea"/>');
+    s.push('<text x="' + (mL + pw / 2) + '" y="' + (LH - 14) + '" text-anchor="middle" font-size="12.5" fill="#465a72">时间 (' + esc(u) + ')</text>');
+    s.push('<text x="17" y="' + (LmT + lpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#465a72" transform="rotate(-90 17 ' + (LmT + lpH / 2) + ')">层平均温度 (°C)</text>');
 
     vis.forEach(function(sr){
       var d = sr.pts.map(function(pt, i){
@@ -2412,12 +2720,12 @@ function solveTransient(cfg){
     var el = $("#dLegend");
     if(!el) return;
     if(!profileData || !profileData.snaps.length){
-      el.innerHTML = '<span style="color:#8697ab">暂无分层数据</span>';
+      el.innerHTML = '<span class="note">暂无分层数据</span>';
       return;
     }
     el.innerHTML = profileData.snaps.map(function(sp, i){
-      return '<span class="lg' + (sp.visible === false ? " off" : "") + '" data-i="' + i + '">' +
-             '<i style="background:' + sp.color + '"></i>停炉后 ' + esc(snapLabel(sp)) + '</span>';
+      return '<button class="lg" type="button" aria-pressed="' + (sp.visible === false ? "false" : "true") + '" data-i="' + i + '">' +
+             '<i style="background:' + sp.color + '"></i>停炉后 ' + esc(snapLabel(sp)) + '</button>';
     }).join("");
     Array.prototype.forEach.call(el.querySelectorAll(".lg"), function(node){
       node.addEventListener("click", function(){
@@ -2433,10 +2741,10 @@ function solveTransient(cfg){
     if(!dwrap) return;
     var vis = dvisibleSnaps();
     if(!vis.length){
-      dwrap.innerHTML = '<div id="tipD"></div><div class="hint" style="padding:46px 10px;text-align:center">' +
+      dwrap.innerHTML = '<div id="tipD"></div><div class="chart-empty"><b>暂无分层数据</b><span>' +
         (currentMode() === "sync"
           ? "选项卡 ① 参数有效后，这里会显示温度沿厚度（内表面 → 外表面）的分布曲线"
-          : "手动输入模式下没有分层数据；把数据来源切回「由稳态计算同步」即可") + '</div>';
+          : "手动输入模式下没有分层数据；把数据来源切回「由稳态计算同步」即可") + '</span></div>';
       dtip = $("#tipD");
       renderDLegend();
       return;
@@ -2456,12 +2764,13 @@ function solveTransient(cfg){
     dview = { xmin: 0, xmax: xmax, Tmin: Tmin, Tmax: Tmax };
 
     var s = [];
-    s.push('<svg id="dChart" viewBox="0 0 ' + W + ' ' + DH + '" xmlns="' + SVGNS + '">');
+    s.push('<svg id="dChart" viewBox="0 0 ' + W + ' ' + DH + '" xmlns="' + SVGNS + '"' +
+           ' role="img" aria-label="温度沿厚度分布曲线">');
     s.push('<rect x="0" y="0" width="' + W + '" height="' + DH + '" fill="#fff"/>');
     ticks(Tmin, Tmax, 6).forEach(function(T){
       var y = dY(T);
-      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#edf2f9"/>');
-      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#8697ab">' +
+      s.push('<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (mL + pw) + '" y2="' + y.toFixed(1) + '" stroke="#eef3fa"/>');
+      s.push('<text x="' + (mL - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11.5" fill="#5b6d84">' +
              (Math.abs(T) >= 100 ? T.toFixed(0) : T.toFixed(1)) + '</text>');
     });
     // 层界面参考线
@@ -2470,20 +2779,20 @@ function solveTransient(cfg){
       if(!(x0 > 0 && x0 < xmax)) return;
       var x = dX(x0);
       s.push('<line x1="' + x.toFixed(1) + '" y1="' + DmT + '" x2="' + x.toFixed(1) + '" y2="' + (DmT + DpH) +
-             '" stroke="#dfe7f2" stroke-dasharray="4 4"/>');
+             '" stroke="#e2e9f3" stroke-dasharray="4 4"/>');
       s.push('<text x="' + x.toFixed(1) + '" y="' + (DmT - 9) + '" text-anchor="middle" font-size="10.5" fill="#a6b4c6">' +
              fmt(x0, 0) + ' mm</text>');
     });
     ticks(0, xmax, 7).forEach(function(xm){
       var x = dX(xm);
-      s.push('<line x1="' + x.toFixed(1) + '" y1="' + DmT + '" x2="' + x.toFixed(1) + '" y2="' + (DmT + DpH) + '" stroke="#f2f6fc"/>');
-      s.push('<text x="' + x.toFixed(1) + '" y="' + (DmT + DpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#8697ab">' +
+      s.push('<line x1="' + x.toFixed(1) + '" y1="' + DmT + '" x2="' + x.toFixed(1) + '" y2="' + (DmT + DpH) + '" stroke="#f4f8fc"/>');
+      s.push('<text x="' + x.toFixed(1) + '" y="' + (DmT + DpH + 18) + '" text-anchor="middle" font-size="11.5" fill="#5b6d84">' +
              fmt(xm, 0) + '</text>');
     });
-    s.push('<line x1="' + mL + '" y1="' + (DmT + DpH) + '" x2="' + (mL + pw) + '" y2="' + (DmT + DpH) + '" stroke="#c9d8ea"/>');
-    s.push('<line x1="' + mL + '" y1="' + DmT + '" x2="' + mL + '" y2="' + (DmT + DpH) + '" stroke="#c9d8ea"/>');
-    s.push('<text x="' + (mL + pw / 2) + '" y="' + (DH - 15) + '" text-anchor="middle" font-size="12.5" fill="#5b7089">距内表面厚度 (mm)</text>');
-    s.push('<text x="17" y="' + (DmT + DpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#5b7089" transform="rotate(-90 17 ' +
+    s.push('<line x1="' + mL + '" y1="' + (DmT + DpH) + '" x2="' + (mL + pw) + '" y2="' + (DmT + DpH) + '" stroke="#cfdaea"/>');
+    s.push('<line x1="' + mL + '" y1="' + DmT + '" x2="' + mL + '" y2="' + (DmT + DpH) + '" stroke="#cfdaea"/>');
+    s.push('<text x="' + (mL + pw / 2) + '" y="' + (DH - 15) + '" text-anchor="middle" font-size="12.5" fill="#465a72">距内表面厚度 (mm)</text>');
+    s.push('<text x="17" y="' + (DmT + DpH / 2) + '" text-anchor="middle" font-size="12.5" fill="#465a72" transform="rotate(-90 17 ' +
            (DmT + DpH / 2) + ')">温度 (°C)</text>');
     s.push('<text x="' + (mL + 5) + '" y="' + (DmT + DpH - 7) + '" font-size="10.5" fill="#a6b4c6">内表面</text>');
     s.push('<text x="' + (mL + pw - 5) + '" y="' + (DmT + DpH - 7) + '" text-anchor="end" font-size="10.5" fill="#a6b4c6">外表面</text>');
@@ -2734,13 +3043,13 @@ function solveTransient(cfg){
   }
 
   /* ---------------- 统计 ---------------- */
-  function kpi(k, v){ return '<div class="kpi"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
+  function kpi(k, v){ return '<div class="summary-item"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
   function renderStats(){
     var box = $("#kpis"), msgs = $("#kMsgs");
     msgs.innerHTML = "";
     var main = mainSeries();
     if(!main || !main.pts.length){
-      box.innerHTML = '<div class="kpi"><div class="k">状态</div><div class="v" style="font-size:14px">暂无数据</div></div>';
+      box.innerHTML = '<div class="summary-item"><div class="k">状态</div><div class="v">暂无数据</div></div>';
       return;
     }
     var u = unitText();
@@ -2839,7 +3148,7 @@ function solveTransient(cfg){
   $("#genBtn").addEventListener("click", function(){
     var T0 = num("#gT0"), Ta = num("#gTa"), tau = num("#gTau"), end = num("#gEnd"), step = num("#gStep");
     if(![T0, Ta, tau, end, step].every(function(v){ return Number.isFinite(v); }) || tau <= 0 || end <= 0 || step <= 0){
-      alert("请填写有效的 T₀、T∞、τ、总时长和取点间隔（均需为正数）。");
+      if(window.UI) UI.toast("请填写有效的 T₀、T∞、τ、总时长和取点间隔（均需为正数）", "warn");
       return;
     }
     var lines = ["# 指数冷却模型生成 T(t) = T∞ + (T₀ − T∞)·e^(−t/τ)",
@@ -2872,20 +3181,44 @@ function solveTransient(cfg){
 
 <script>
 
-/* ================= 选项卡切换（合并版新增） ================= */
+/* ================= 选项卡切换（含 ARIA 与键盘操作） ================= */
 (function(){
   "use strict";
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
   var panels = Array.prototype.slice.call(document.querySelectorAll(".panel"));
-  function show(id){
-    panels.forEach(function(p){ p.classList.toggle("hidden", p.id !== id); });
-    tabs.forEach(function(t){ t.classList.toggle("active", t.getAttribute("data-panel") === id); });
+
+  function show(id, focusTab){
+    panels.forEach(function(p){
+      var on = p.id === id;
+      p.classList.toggle("hidden", !on);
+      p.setAttribute("aria-hidden", on ? "false" : "true");
+    });
+    tabs.forEach(function(t){
+      var on = t.getAttribute("data-panel") === id;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.setAttribute("tabindex", on ? "0" : "-1");
+      if(on && focusTab) t.focus();
+    });
     var box = document.getElementById(id);
     if(box && box.getBoundingClientRect().top < 0) box.scrollIntoView({block:"start"});
   }
+
   tabs.forEach(function(t){
     t.addEventListener("click", function(){ show(t.getAttribute("data-panel")); });
+    t.addEventListener("keydown", function(e){
+      var i = tabs.indexOf(t), n = tabs.length, j = -1;
+      if(e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % n;
+      else if(e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + n) % n;
+      else if(e.key === "Home") j = 0;
+      else if(e.key === "End") j = n - 1;
+      if(j >= 0){
+        e.preventDefault();
+        show(tabs[j].getAttribute("data-panel"), true);
+      }
+    });
   });
+
   // 便于分享/截图：index.html?tab=2 或 #curve 直接打开选项卡 ②
   var qm = /[?&]tab=(\d)/.exec(location.search);
   if((qm && qm[1] === "2") || location.hash === "#curve") show("panelCurve");
@@ -3074,7 +3407,7 @@ function solveTransient(cfg){
 
     /* 四、降温曲线 */
     var svg = document.querySelector("#kChart");
-    var kpiNodes = document.querySelectorAll("#kpis .kpi");
+    var kpiNodes = document.querySelectorAll("#kpis .summary-item");
     var legendNodes = document.querySelectorAll("#kLegend .lg");
     if(svg && svg.querySelector("path") && kpiNodes.length){
       var kpis = [];
@@ -3152,7 +3485,7 @@ function solveTransient(cfg){
 
   function doPrint(){
     if(!buildReport()){
-      alert("当前参数不完整或存在错误，请先修正选项卡 ① 的输入，再打印报告。");
+      if(window.UI) UI.toast("当前参数不完整或有误，请先修正选项卡 ① 的输入再打印", "warn");
       return;
     }
     window.print();
@@ -3970,8 +4303,8 @@ function solveTransient(cfg){
 (function(){
   "use strict";
 
-  var VERSION = "1.3.0";
-  var BUILD   = "2026-11-07";
+  var VERSION = "1.4.0";
+  var BUILD   = "2026-11-21";
 
   /* ★ 更新清单地址
      · MANIFEST_REL：托管在 GitHub Pages 等服务器上时用（相对路径、同源，最省事）
@@ -4111,5 +4444,98 @@ function solveTransient(cfg){
   else init();
 })();
 </script>
+<script>
+/* ==================== 界面工具：轻提示 / 二次确认 / 复制表格 / 移动端操作条 ==================== */
+(function(){
+  "use strict";
+  var toastEl = document.getElementById("toast"), toastTimer = null;
+
+  function toast(msg, kind){
+    if(!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.className = "toast show" + (kind ? " " + kind : "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.className = "toast"; }, kind === "err" ? 4200 : 2400);
+  }
+
+  function confirm2(btn, msg, fn){
+    if(!btn){ fn(); return; }
+    if(btn.dataset.confirm === "1"){
+      delete btn.dataset.confirm;
+      if(btn.dataset.label) btn.textContent = btn.dataset.label;
+      btn.classList.remove("confirming");
+      fn();
+      return;
+    }
+    btn.dataset.label = btn.textContent;
+    btn.dataset.confirm = "1";
+    btn.textContent = msg;
+    btn.classList.add("confirming");
+    setTimeout(function(){
+      if(btn.dataset.confirm === "1"){
+        delete btn.dataset.confirm;
+        if(btn.dataset.label) btn.textContent = btn.dataset.label;
+        btn.classList.remove("confirming");
+      }
+    }, 3000);
+  }
+
+  function legacyCopy(txt){
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("已复制到剪贴板"); }
+    catch(e){ toast("复制失败，请手动选择后复制", "err"); }
+    document.body.removeChild(ta);
+  }
+  function copyText(txt){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(txt).then(
+        function(){ toast("已复制到剪贴板"); },
+        function(){ legacyCopy(txt); });
+    }
+    legacyCopy(txt);
+  }
+  function tableToTSV(table){
+    var rows = [];
+    Array.prototype.forEach.call(table.querySelectorAll("tr"), function(tr){
+      var cells = Array.prototype.map.call(tr.querySelectorAll("th,td"), function(c){
+        return c.innerText.replace(/\s+/g, " ").trim();
+      });
+      if(cells.length) rows.push(cells.join("\t"));
+    });
+    return rows.join("\n");
+  }
+
+  /* 数字输入：移动端弹数字键盘 */
+  Array.prototype.forEach.call(document.querySelectorAll('input[type="number"]'), function(el){
+    el.setAttribute("inputmode", "decimal");
+  });
+
+  /* 复制沿厚度温度表（TSV，可直接粘到 Excel） */
+  var ctb = document.getElementById("copyTableBtn");
+  if(ctb) ctb.addEventListener("click", function(){
+    var t = document.getElementById("depthTable");
+    if(!t || !t.querySelector("tbody tr")){ toast("暂无可复制的表格", "warn"); return; }
+    copyText(tableToTSV(t));
+  });
+
+  /* 移动端粘性操作条 */
+  var mbParams = document.getElementById("mbParams");
+  if(mbParams) mbParams.addEventListener("click", function(){
+    var panel = document.querySelector(".panel:not(.hidden)");
+    var rail = panel ? panel.querySelector(".rail") : null;
+    if(rail) rail.scrollIntoView({ behavior:"smooth", block:"start" });
+  });
+  var mbReport = document.getElementById("mbReport");
+  if(mbReport) mbReport.addEventListener("click", function(){
+    var eb = document.getElementById("exportBtn");
+    if(eb) eb.click();
+  });
+
+  window.UI = { toast: toast, confirm2: confirm2, copyText: copyText, tableToTSV: tableToTSV };
+})();
+</script>
+
 </body>
 </html>
